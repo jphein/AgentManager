@@ -32,7 +32,6 @@ import { createRepositoriesRouter } from "./src/routes/repositories";
 import { createSchedulerRouter } from "./src/routes/scheduler";
 import { createStartupRouter } from "./src/routes/startup";
 import { createTasksRouter } from "./src/routes/tasks";
-import { createTokensRouter } from "./src/routes/tokens";
 import { createUsageRouter } from "./src/routes/usage";
 import { createWorkflowsRouter } from "./src/routes/workflows";
 import { Scheduler } from "./src/scheduler";
@@ -218,7 +217,6 @@ app.use(createContextPolicyRouter());
 app.use(createStartupRouter(agentManager, messageBus));
 app.use("/api/agents", hookConfigRouter);
 app.use(createHooksRouter(agentManager));
-app.use(createTokensRouter());
 // Layer 1: Kill switch endpoint (no extra auth beyond authMiddleware above)
 app.use(createKillSwitchRouter(agentManager));
 
