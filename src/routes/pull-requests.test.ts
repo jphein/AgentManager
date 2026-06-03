@@ -193,7 +193,7 @@ const sampleGhPR = {
 // Configure mocks for a single-repo scenario
 function setupMocks(ghPRs: object[] = [sampleGhPR]) {
   vi.mocked(fsMod.existsSync).mockReturnValue(true);
-  vi.mocked(fsMod.readdirSync).mockReturnValue(["fanbot.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
+  vi.mocked(fsMod.readdirSync).mockReturnValue(["myrepo.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
   vi.mocked(fsMod.statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<typeof fsMod.statSync>);
   vi.mocked(fsMod.readFileSync).mockImplementation(() => {
     throw new Error("no file");
@@ -205,7 +205,7 @@ function setupMocks(ghPRs: object[] = [sampleGhPR]) {
     (_c: unknown, args: unknown, _o: unknown, cb: (e: Error | null, r?: { stdout: string }) => void) => {
       const a = args as string[];
       if (a.includes("remote")) {
-        cb(null, { stdout: "https://github.com/org/fanbot.git\n" });
+        cb(null, { stdout: "https://github.com/org/myrepo.git\n" });
       } else if (a.includes("pr")) {
         cb(null, { stdout: JSON.stringify(ghPRs) });
       } else {
@@ -330,7 +330,7 @@ describe("GET /api/pull-requests — PR response shape", () => {
       branch: "feature-branch",
       baseBranch: "main",
       author: "Dev User",
-      repo: "fanbot",
+      repo: "myrepo",
       isDraft: false,
       additions: 10,
       deletions: 3,
@@ -423,7 +423,7 @@ describe("GET /api/pull-requests — agent cross-referencing", () => {
 describe("GET /api/pull-requests — error handling", () => {
   it("returns empty array (not 500) when gh pr list exits with error", async () => {
     vi.mocked(fsMod.existsSync).mockReturnValue(true);
-    vi.mocked(fsMod.readdirSync).mockReturnValue(["fanbot.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
+    vi.mocked(fsMod.readdirSync).mockReturnValue(["myrepo.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
     vi.mocked(fsMod.statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<typeof fsMod.statSync>);
     vi.mocked(fsMod.readFileSync).mockImplementation(() => {
       throw new Error("no file");
@@ -435,7 +435,7 @@ describe("GET /api/pull-requests — error handling", () => {
       (_c: unknown, args: unknown, _o: unknown, cb: (e: Error | null, r?: { stdout: string }) => void) => {
         const a = args as string[];
         if (a.includes("remote")) {
-          cb(null, { stdout: "https://github.com/org/fanbot.git\n" });
+          cb(null, { stdout: "https://github.com/org/myrepo.git\n" });
         } else {
           cb(new Error("gh: command not found"));
         }
@@ -457,7 +457,7 @@ describe("GET /api/pull-requests — 30-second cache", () => {
   it("returns fromCache:false on first call, fromCache:true on second (no refresh)", async () => {
     let ghCallCount = 0;
     vi.mocked(fsMod.existsSync).mockReturnValue(true);
-    vi.mocked(fsMod.readdirSync).mockReturnValue(["fanbot.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
+    vi.mocked(fsMod.readdirSync).mockReturnValue(["myrepo.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
     vi.mocked(fsMod.statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<typeof fsMod.statSync>);
     vi.mocked(fsMod.readFileSync).mockImplementation(() => {
       throw new Error("no file");
@@ -468,7 +468,7 @@ describe("GET /api/pull-requests — 30-second cache", () => {
       (_c: unknown, args: unknown, _o: unknown, cb: (e: Error | null, r?: { stdout: string }) => void) => {
         const a = args as string[];
         if (a.includes("remote")) {
-          cb(null, { stdout: "https://github.com/org/fanbot.git\n" });
+          cb(null, { stdout: "https://github.com/org/myrepo.git\n" });
         } else if (a.includes("pr")) {
           ghCallCount++;
           cb(null, { stdout: JSON.stringify([sampleGhPR]) });
@@ -496,7 +496,7 @@ describe("GET /api/pull-requests — 30-second cache", () => {
   it("bypasses cache when refresh=true is passed", async () => {
     let ghCallCount = 0;
     vi.mocked(fsMod.existsSync).mockReturnValue(true);
-    vi.mocked(fsMod.readdirSync).mockReturnValue(["fanbot.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
+    vi.mocked(fsMod.readdirSync).mockReturnValue(["myrepo.git"] as unknown as ReturnType<typeof fsMod.readdirSync>);
     vi.mocked(fsMod.statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<typeof fsMod.statSync>);
     vi.mocked(fsMod.readFileSync).mockImplementation(() => {
       throw new Error("no file");
@@ -507,7 +507,7 @@ describe("GET /api/pull-requests — 30-second cache", () => {
       (_c: unknown, args: unknown, _o: unknown, cb: (e: Error | null, r?: { stdout: string }) => void) => {
         const a = args as string[];
         if (a.includes("remote")) {
-          cb(null, { stdout: "https://github.com/org/fanbot.git\n" });
+          cb(null, { stdout: "https://github.com/org/myrepo.git\n" });
         } else if (a.includes("pr")) {
           ghCallCount++;
           cb(null, { stdout: JSON.stringify([sampleGhPR]) });
