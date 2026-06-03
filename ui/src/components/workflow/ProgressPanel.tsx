@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Badge, badgeVariants } from "@/components/ui/badge";
 import type { VariantProps } from "class-variance-authority";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Badge, type badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -48,10 +48,7 @@ const STAGE_ORDER: WorkflowStage[] = ["analyzing", "implementing", "creating-pr"
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
-const OVERALL_STATUS: Record<
-  WorkflowForPanel["status"],
-  { label: string; badgeVariant: BadgeVariant }
-> = {
+const OVERALL_STATUS: Record<WorkflowForPanel["status"], { label: string; badgeVariant: BadgeVariant }> = {
   starting: { label: "Starting up…", badgeVariant: "warning" },
   running: { label: "Running", badgeVariant: "info" },
   completed: { label: "Completed", badgeVariant: "success" },
@@ -60,10 +57,7 @@ const OVERALL_STATUS: Record<
   recovering: { label: "Recovering…", badgeVariant: "warning" },
 } as const;
 
-const AGENT_STATUS_CONFIG: Record<
-  string,
-  { label: string; textColor: string; dotClass: string; pulse: boolean }
-> = {
+const AGENT_STATUS_CONFIG: Record<string, { label: string; textColor: string; dotClass: string; pulse: boolean }> = {
   starting: { label: "Starting", textColor: "text-amber-400", dotClass: "bg-amber-400", pulse: true },
   running: { label: "Running", textColor: "text-cyan-400", dotClass: "bg-emerald-500", pulse: true },
   completed: { label: "Done", textColor: "text-emerald-400", dotClass: "bg-emerald-500", pulse: false },
@@ -135,20 +129,12 @@ function WorkflowStageIndicator({ stage, workflowStatus }: WorkflowStageIndicato
                   </svg>
                 )}
               </div>
-              <span
-                className={cn(
-                  "text-[10px]",
-                  active ? "font-medium text-cyan-400" : "text-zinc-500",
-                )}
-              >
+              <span className={cn("text-[10px]", active ? "font-medium text-cyan-400" : "text-zinc-500")}>
                 {s.label}
               </span>
             </div>
             {i < STAGES.length - 1 && (
-              <div
-                className={cn("mx-2 h-px flex-1", done ? "bg-emerald-700/50" : "bg-zinc-700")}
-                aria-hidden="true"
-              />
+              <div className={cn("mx-2 h-px flex-1", done ? "bg-emerald-700/50" : "bg-zinc-700")} aria-hidden="true" />
             )}
           </div>
         );
@@ -192,11 +178,7 @@ function WorkflowAgentRow({ agent }: WorkflowAgentRowProps) {
   return (
     <div className="flex items-center gap-3 py-1.5 px-2">
       <div
-        className={cn(
-          "h-2 w-2 flex-shrink-0 rounded-full",
-          config.dotClass,
-          config.pulse && "animate-pulse",
-        )}
+        className={cn("h-2 w-2 flex-shrink-0 rounded-full", config.dotClass, config.pulse && "animate-pulse")}
         aria-hidden="true"
       />
       <div className="flex min-w-0 flex-1 flex-col">
@@ -250,18 +232,14 @@ export function ProgressPanel({ workflow, onCancel, className }: ProgressPanelPr
     onCancel();
   }, [onCancel]);
 
-  const runningCount = workflow.agents.filter(
-    (a) => a.status === "running" || a.status === "starting",
-  ).length;
+  const runningCount = workflow.agents.filter((a) => a.status === "running" || a.status === "starting").length;
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
       {/* Issue info */}
       {(workflow.issueId || workflow.issueTitle) && (
         <div>
-          {workflow.issueId && (
-            <p className="font-mono text-xs text-zinc-500">{workflow.issueId}</p>
-          )}
+          {workflow.issueId && <p className="font-mono text-xs text-zinc-500">{workflow.issueId}</p>}
           {workflow.issueTitle && (
             <p className="mt-0.5 line-clamp-2 text-sm font-medium text-zinc-100">{workflow.issueTitle}</p>
           )}
@@ -275,15 +253,10 @@ export function ProgressPanel({ workflow, onCancel, className }: ProgressPanelPr
             {isActive && (
               <div className="flex gap-0.5" aria-hidden="true">
                 <div className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
-                <div
-                  className="h-2 w-2 animate-pulse rounded-full bg-cyan-400"
-                  style={{ animationDelay: "300ms" }}
-                />
+                <div className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" style={{ animationDelay: "300ms" }} />
               </div>
             )}
-            <Badge variant={statusConfig.badgeVariant}>
-              {statusConfig.label}
-            </Badge>
+            <Badge variant={statusConfig.badgeVariant}>{statusConfig.label}</Badge>
           </div>
           <span className="text-xs text-zinc-500">
             {isActive && `${formatElapsedMinutes(workflow.createdAt)} elapsed · `}
@@ -317,9 +290,7 @@ export function ProgressPanel({ workflow, onCancel, className }: ProgressPanelPr
       </section>
 
       {/* Error */}
-      {workflow.error && (
-        <p className="text-xs text-red-400">{workflow.error}</p>
-      )}
+      {workflow.error && <p className="text-xs text-red-400">{workflow.error}</p>}
 
       {/* Cancel */}
       {isActive && (

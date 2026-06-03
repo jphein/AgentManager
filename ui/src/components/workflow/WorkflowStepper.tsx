@@ -70,10 +70,7 @@ export const WorkflowStepper: FC<WorkflowStepperProps> = ({ currentStep, classNa
                 )}
               </div>
               <span
-                className={cn(
-                  "ml-2 text-xs font-medium hidden sm:block",
-                  isActive ? "text-zinc-100" : "text-zinc-500",
-                )}
+                className={cn("ml-2 text-xs font-medium hidden sm:block", isActive ? "text-zinc-100" : "text-zinc-500")}
                 aria-hidden="true"
               >
                 {STEP_LABELS[step]}

@@ -1,6 +1,6 @@
-export { WorkflowDrawer } from "./WorkflowDrawer";
-export type { WorkflowDrawerProps, LinearWorkflow } from "./WorkflowDrawer";
-export { WorkflowStepper } from "./WorkflowStepper";
-export type { WorkflowStepperProps } from "./WorkflowStepper";
+export type { ProgressPanelProps, WorkflowAgent, WorkflowForPanel, WorkflowStage } from "./ProgressPanel";
 export { ProgressPanel } from "./ProgressPanel";
-export type { ProgressPanelProps, WorkflowForPanel, WorkflowAgent, WorkflowStage } from "./ProgressPanel";
+export type { LinearWorkflow, WorkflowDrawerProps } from "./WorkflowDrawer";
+export { WorkflowDrawer } from "./WorkflowDrawer";
+export type { WorkflowStepperProps } from "./WorkflowStepper";
+export { WorkflowStepper } from "./WorkflowStepper";

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { type WorkflowForPanel, ProgressPanel } from "./ProgressPanel";
+import { ProgressPanel, type WorkflowForPanel } from "./ProgressPanel";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -75,15 +75,9 @@ function toPanel(w: LinearWorkflow): WorkflowForPanel {
 /**
  * Slide-out panel that lists all workflows and expands each into a ProgressPanel.
  * Uses a custom drawer (fixed panel + backdrop) styled consistently with the AM
- * zinc/indigo/emerald palette. No Fanbot-specific colours or imports.
+ * zinc/indigo/emerald palette.
  */
-export function WorkflowDrawer({
-  open,
-  onClose,
-  onStartNew,
-  authFetch,
-  toast,
-}: WorkflowDrawerProps) {
+export function WorkflowDrawer({ open, onClose, onStartNew, authFetch, toast }: WorkflowDrawerProps) {
   const [workflows, setWorkflows] = useState<LinearWorkflow[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -115,9 +109,7 @@ export function WorkflowDrawer({
   // Auto-expand newest active workflow when none is already expanded
   useEffect(() => {
     if (expandedId) return;
-    const active = workflows.find(
-      (w) => w.status === "starting" || w.status === "running",
-    );
+    const active = workflows.find((w) => w.status === "starting" || w.status === "running");
     if (active) setExpandedId(active.id);
   }, [workflows, expandedId]);
 
@@ -136,11 +128,7 @@ export function WorkflowDrawer({
       try {
         const res = await authFetch(`/api/workflows/${id}`, { method: "DELETE" });
         if (res.ok) {
-          setWorkflows((prev) =>
-            prev.map((w) =>
-              w.id === id ? { ...w, status: "cancelled" as const } : w,
-            ),
-          );
+          setWorkflows((prev) => prev.map((w) => (w.id === id ? { ...w, status: "cancelled" as const } : w)));
           toast("Workflow cancelled", "info");
         }
       } catch {
@@ -150,9 +138,7 @@ export function WorkflowDrawer({
     [authFetch, toast],
   );
 
-  const activeCount = workflows.filter(
-    (w) => w.status === "starting" || w.status === "running",
-  ).length;
+  const activeCount = workflows.filter((w) => w.status === "starting" || w.status === "running").length;
 
   return (
     <>
@@ -209,12 +195,7 @@ export function WorkflowDrawer({
               className="text-zinc-400 hover:text-zinc-200"
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="M4 4l8 8M12 4l-8 8"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                />
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </Button>
           </div>
@@ -225,16 +206,8 @@ export function WorkflowDrawer({
           {workflows.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center py-16">
               <p className="text-sm text-zinc-500 mb-1">No workflows yet</p>
-              <p className="text-xs text-zinc-600">
-                Start a workflow from a Linear issue, project, or cycle.
-              </p>
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                onClick={onStartNew}
-                className="mt-4"
-              >
+              <p className="text-xs text-zinc-600">Start a workflow from a Linear issue, project, or cycle.</p>
+              <Button type="button" variant="default" size="sm" onClick={onStartNew} className="mt-4">
                 Start workflow
               </Button>
             </div>
@@ -245,10 +218,7 @@ export function WorkflowDrawer({
               const issueLabel = wf.linearUrl.split("/").pop() || wf.id.slice(0, 8);
 
               return (
-                <div
-                  key={wf.id}
-                  className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden"
-                >
+                <div key={wf.id} className="rounded-lg border border-zinc-800 bg-zinc-900/50 overflow-hidden">
                   {/* Collapsed header — always visible */}
                   <button
                     type="button"
@@ -256,21 +226,13 @@ export function WorkflowDrawer({
                     className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-zinc-800/30 transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      {isActive && (
-                        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse flex-shrink-0" />
-                      )}
+                      {isActive && <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse flex-shrink-0" />}
                       {wf.status === "completed" && (
                         <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
                       )}
-                      {wf.status === "failed" && (
-                        <span className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0" />
-                      )}
-                      {wf.status === "cancelled" && (
-                        <span className="w-2 h-2 rounded-full bg-zinc-600 flex-shrink-0" />
-                      )}
-                      <span className="text-xs font-mono text-zinc-300 truncate">
-                        {issueLabel}
-                      </span>
+                      {wf.status === "failed" && <span className="w-2 h-2 rounded-full bg-red-400 flex-shrink-0" />}
+                      {wf.status === "cancelled" && <span className="w-2 h-2 rounded-full bg-zinc-600 flex-shrink-0" />}
+                      <span className="text-xs font-mono text-zinc-300 truncate">{issueLabel}</span>
                       <span className="text-[10px] text-zinc-600">{wf.repository}</span>
                     </div>
                     <svg
@@ -279,10 +241,7 @@ export function WorkflowDrawer({
                       viewBox="0 0 12 12"
                       fill="none"
                       aria-hidden="true"
-                      className={cn(
-                        "text-zinc-500 transition-transform flex-shrink-0",
-                        isExpanded && "rotate-180",
-                      )}
+                      className={cn("text-zinc-500 transition-transform flex-shrink-0", isExpanded && "rotate-180")}
                     >
                       <path
                         d="M3 4.5l3 3 3-3"
@@ -298,10 +257,7 @@ export function WorkflowDrawer({
                   {isExpanded && (
                     <div className="px-3 pb-3 border-t border-zinc-800/60">
                       <div className="pt-3">
-                        <ProgressPanel
-                          workflow={toPanel(wf)}
-                          onCancel={() => handleCancel(wf.id)}
-                        />
+                        <ProgressPanel workflow={toPanel(wf)} onCancel={() => handleCancel(wf.id)} />
                         {wf.prUrl && (
                           <a
                             href={wf.prUrl}
