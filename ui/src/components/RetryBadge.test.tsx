@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { RetryBadge } from "./RetryBadge";
+import { describe, expect, it } from "vitest";
 import type { RetryState } from "./RetryBadge";
+import { RetryBadge } from "./RetryBadge";
 
 describe("RetryBadge", () => {
   const baseRetry: RetryState = { attempt: 1 };

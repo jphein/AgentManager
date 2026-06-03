@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { TokenUsageBar } from "./TokenUsageBar";
 
 describe("TokenUsageBar", () => {
@@ -20,12 +20,7 @@ describe("TokenUsageBar", () => {
 
   it("renders formatted values when formatValue is provided", () => {
     const { container } = render(
-      <TokenUsageBar
-        current={1000}
-        limit={5000}
-        formatValue={(n) => `${n}t`}
-        label="Usage"
-      />
+      <TokenUsageBar current={1000} limit={5000} formatValue={(n) => `${n}t`} label="Usage" />,
     );
     // Values are rendered inside a single span as "1000t / 5000t" with text nodes
     expect(container.textContent).toContain("1000t");
