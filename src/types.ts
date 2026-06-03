@@ -49,7 +49,7 @@ export interface AgentProcess {
   eventBuffer: StreamEvent[];
   /** Total number of events ever appended (used to compute ring buffer offset). */
   eventBufferTotal: number;
-  /** Session-level cost accumulated from assistant events. */
+  /** Session-level cost accumulated from assistant events (for result reconciliation). */
   sessionEstimatedCost?: number;
   /** Session-level input tokens accumulated from assistant events. */
   sessionTokensIn?: number;
@@ -57,6 +57,8 @@ export interface AgentProcess {
   sessionTokensOut?: number;
   /** Path to the temporary JSON schema file written for --json-schema. */
   jsonSchemaPath?: string;
+  /** True after a soft-stall notification has been sent to avoid duplicate UI alerts. */
+  softStallNotified?: boolean;
 }
 
 export interface AuthPayload {
