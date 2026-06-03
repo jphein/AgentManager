@@ -197,9 +197,11 @@ describe("skip-permissions lifecycle", () => {
   ): string[] {
     return (
       manager as unknown as {
-        buildClaudeArgs: (opts: Record<string, unknown>, model: string, resumeSessionId?: string) => string[];
+        processManager: {
+          buildClaudeArgs: (opts: Record<string, unknown>, model: string, resumeSessionId?: string) => string[];
+        };
       }
-    ).buildClaudeArgs(opts, model, resumeSessionId);
+    ).processManager.buildClaudeArgs(opts, model, resumeSessionId);
   }
 
   function injectAgent(agentProc: AgentProcess): void {
@@ -219,9 +221,9 @@ describe("skip-permissions lifecycle", () => {
       expect(args).not.toContain("--dangerously-skip-permissions");
     });
 
-    it("omits --dangerously-skip-permissions when flag is undefined", () => {
+    it("includes --dangerously-skip-permissions when flag is undefined (default: headless agents need it)", () => {
       const args = buildClaudeArgs({ prompt: "hello" }, "claude-sonnet-4-6");
-      expect(args).not.toContain("--dangerously-skip-permissions");
+      expect(args).toContain("--dangerously-skip-permissions");
     });
 
     it("includes --resume when resumeSessionId is provided", () => {
@@ -292,7 +294,8 @@ describe("skip-permissions lifecycle", () => {
       injectAgent(agentProc);
 
       const buildSpy = vi.spyOn(
-        manager as unknown as { buildClaudeArgs: (...args: unknown[]) => string[] },
+        (manager as unknown as { processManager: { buildClaudeArgs: (...args: unknown[]) => string[] } })
+          .processManager,
         "buildClaudeArgs",
       );
 
@@ -335,7 +338,8 @@ describe("skip-permissions lifecycle", () => {
       injectAgent(agentProc);
 
       const buildSpy = vi.spyOn(
-        manager as unknown as { buildClaudeArgs: (...args: unknown[]) => string[] },
+        (manager as unknown as { processManager: { buildClaudeArgs: (...args: unknown[]) => string[] } })
+          .processManager,
         "buildClaudeArgs",
       );
 
@@ -373,7 +377,8 @@ describe("skip-permissions lifecycle", () => {
       injectAgent(agentProc);
 
       const buildSpy = vi.spyOn(
-        manager as unknown as { buildClaudeArgs: (...args: unknown[]) => string[] },
+        (manager as unknown as { processManager: { buildClaudeArgs: (...args: unknown[]) => string[] } })
+          .processManager,
         "buildClaudeArgs",
       );
 
