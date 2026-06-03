@@ -61,7 +61,7 @@ function makePR(overrides: Partial<PullRequestItem> = {}): PullRequestItem {
     number: 1,
     title: "Test PR",
     state: "open",
-    draft: false,
+    isDraft: false,
     repo: "owner/repo",
     branch: "feature/test",
     baseBranch: "main",
