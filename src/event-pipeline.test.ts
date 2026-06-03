@@ -23,7 +23,7 @@ function makeAgentProc(id = "agent-1"): AgentProcess {
         lastTurnTokensIn: 0,
       },
     },
-    listeners: [],
+    listeners: new Set(),
     eventBuffer: [],
     eventBufferTotal: 0,
     persistBatch: "",
@@ -83,7 +83,7 @@ describe("EventPipeline", () => {
     writeQueues = new Map();
     onAgentUpdated = vi.fn();
     // biome-ignore lint/suspicious/noExplicitAny: test stub
-    pipeline = new EventPipeline(registry as any, usageTracker as any, writeQueues, onAgentUpdated);
+    pipeline = new EventPipeline(registry as any, usageTracker as any, writeQueues, onAgentUpdated as any);
   });
 
   afterEach(() => {
@@ -233,7 +233,7 @@ describe("EventPipeline", () => {
 
     it("notifies listeners with buffered events", () => {
       const listener = vi.fn();
-      agentProc.listeners.push(listener);
+      agentProc.listeners.add(listener);
       const event = { type: "result" } as StreamEvent;
       agentProc.listenerBatch = [event];
       pipeline.flushEventBatch("agent-1", agentProc);
