@@ -10,7 +10,9 @@ export default function SettingsPage() {
       <SettingsLayout>
         <div className="max-w-2xl space-y-6">
           <h2 className="text-lg font-medium text-zinc-200">Settings</h2>
-          <p className="text-sm text-zinc-400">Configure shared context, Claude config, guardrails, API keys, and security.</p>
+          <p className="text-sm text-zinc-400">
+            Configure shared context, Claude config, guardrails, API keys, and security.
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Link
               href="/settings/context"

@@ -30,7 +30,10 @@ export function SecurityPanel({ api }: { api: ReturnType<typeof createApi> }) {
   // QR code rendered via third-party CDN-free approach:
   // We use the Google Charts QR API as a fallback since there is no QR lib in dependencies.
   // The URI is always displayed as plain text so users can enter it manually.
-  const qrUrl = setup.step !== "idle" ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(setup.uri)}` : null;
+  const qrUrl =
+    setup.step !== "idle"
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(setup.uri)}`
+      : null;
 
   const flashMessage = useCallback((msg: string, variant: "default" | "destructive" = "default", ms = 4000) => {
     setMessage(msg);
@@ -143,9 +146,7 @@ export function SecurityPanel({ api }: { api: ReturnType<typeof createApi> }) {
   return (
     <div className="max-w-lg space-y-6">
       <div>
-        <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider mb-1">
-          Two-Factor Authentication
-        </h2>
+        <h2 className="text-sm font-semibold text-zinc-200 uppercase tracking-wider mb-1">Two-Factor Authentication</h2>
         <p className="text-sm text-zinc-400">
           Use an authenticator app (e.g. Google Authenticator, Authy) to generate time-based one-time passwords.
         </p>
@@ -154,9 +155,7 @@ export function SecurityPanel({ api }: { api: ReturnType<typeof createApi> }) {
       {/* Status badge */}
       <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-zinc-800 bg-zinc-900/50">
         <span
-          className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-            enabled ? "bg-sky-400" : "bg-zinc-600"
-          }`}
+          className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${enabled ? "bg-sky-400" : "bg-zinc-600"}`}
           aria-hidden="true"
         />
         <div className="flex-1 min-w-0">
@@ -254,11 +253,7 @@ export function SecurityPanel({ api }: { api: ReturnType<typeof createApi> }) {
                 className="h-10 w-32 font-mono tracking-widest"
                 onKeyDown={(e) => e.key === "Enter" && confirmDisable()}
               />
-              <Button
-                variant="destructive"
-                onClick={confirmDisable}
-                disabled={busy || disableCode.length !== 6}
-              >
+              <Button variant="destructive" onClick={confirmDisable} disabled={busy || disableCode.length !== 6}>
                 Disable 2FA
               </Button>
             </div>
