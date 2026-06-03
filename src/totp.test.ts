@@ -342,7 +342,8 @@ describe("verifyAndConsumeBackupCode", () => {
     const { plain, hashed } = generateBackupCodes();
     const first = verifyAndConsumeBackupCode(plain[2], hashed);
     expect(first).not.toBeNull();
-    expect(verifyAndConsumeBackupCode(plain[2], first?.remaining)).toBeNull();
+    // biome-ignore lint/style/noNonNullAssertion: already asserted first is non-null above
+    expect(verifyAndConsumeBackupCode(plain[2], first!.remaining)).toBeNull();
   });
 });
 
