@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { HookRule } from "../api";
 import { useApi } from "../hooks/useApi";
-import { DEFAULT_FORM, type FormState, HookRuleModal, formFromRule, generateId, ruleFromForm } from "./HookRuleModal";
+import { DEFAULT_FORM, type FormState, formFromRule, generateId, HookRuleModal, ruleFromForm } from "./HookRuleModal";
 
 interface HooksConfigPanelProps {
   agentId: string;
