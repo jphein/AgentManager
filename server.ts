@@ -22,6 +22,7 @@ import { createContextPolicyRouter } from "./src/routes/context-policy";
 import { createCostRouter } from "./src/routes/cost";
 import { createHealthRouter } from "./src/routes/health";
 import hookConfigRouter from "./src/routes/hook-config";
+import { createHooksRouter } from "./src/routes/hooks";
 import { createKillSwitchRouter } from "./src/routes/kill-switch";
 import { createMcpRouter } from "./src/routes/mcp";
 import { createMergeGateRouter } from "./src/routes/merge-gate";
@@ -215,6 +216,7 @@ app.use(createRepositoriesRouter(agentManager));
 app.use(createContextPolicyRouter());
 app.use(createStartupRouter(agentManager, messageBus));
 app.use("/api/agents", hookConfigRouter);
+app.use(createHooksRouter(agentManager));
 // Layer 1: Kill switch endpoint (no extra auth beyond authMiddleware above)
 app.use(createKillSwitchRouter(agentManager));
 
