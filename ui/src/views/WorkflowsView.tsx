@@ -5,6 +5,7 @@ import type { LinearWorkflow } from "../api";
 import { Header } from "../components/Header";
 import { Sidebar } from "../components/Sidebar";
 import { useToast } from "../components/Toast";
+import { UiModeToggle } from "../components/UiModeToggle";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { AgentRow } from "../components/workflow/AgentRow";
@@ -184,9 +185,12 @@ export function WorkflowsView() {
         <main id="main-content" className="flex-1 overflow-y-auto px-4 py-6">
           <div className="mx-auto max-w-3xl space-y-6">
             {/* Page header */}
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">Workflows</h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">Linear ticket workflows managed by agent teams</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-semibold text-foreground">Workflows</h1>
+                <p className="mt-0.5 text-sm text-muted-foreground">Linear ticket workflows managed by agent teams</p>
+              </div>
+              <UiModeToggle />
             </div>
 
             {loading && (
