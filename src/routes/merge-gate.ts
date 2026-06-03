@@ -91,7 +91,7 @@ export function getMergePolicy(
 
 /**
  * Extract the short repo name from an "owner/repo" string.
- * Returns the sanitized repo name (e.g. "fanvue/AgentManager" → "AgentManager").
+ * Returns the sanitized repo name (e.g. "owner/AgentManager" → "AgentManager").
  */
 export function repoKeyFromOwnerRepo(ownerRepo: string): string {
   const slash = ownerRepo.lastIndexOf("/");
