@@ -202,3 +202,8 @@ export function validatePatchAgent(req: Request, res: Response, next: NextFuncti
   req.body = sanitized;
   next();
 }
+
+/** Sanitize a repository name: alphanumeric, hyphens, underscores only. */
+export function sanitizeRepoName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, "");
+}

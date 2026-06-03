@@ -158,3 +158,14 @@ export function requireHumanUser(req: Request, res: Response, next: NextFunction
   }
   next();
 }
+
+/** Middleware that blocks requests from agent-service tokens.
+ *  Use this to protect operations that should only be callable by human users. */
+export function requireNotAgentService(req: Request, res: Response, next: NextFunction): void {
+  const user = (req as AuthenticatedRequest).user;
+  if (!user || user.sub === "agent-service") {
+    res.status(403).json({ error: "This operation is not allowed for agent service tokens" });
+    return;
+  }
+  next();
+}
