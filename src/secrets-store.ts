@@ -19,6 +19,13 @@ const AUTH_TAG_LEN = 16;
 
 export type AnthropicStored = { key: string; mode: "openrouter" | "anthropic" };
 
+export interface TotpStored {
+  /** Base32-encoded TOTP secret (stored only after verification). */
+  secret: string;
+  /** ISO timestamp of when TOTP was enabled. */
+  enabledAt: string;
+}
+
 export interface StoredSecrets {
   anthropic?: AnthropicStored;
   githubToken?: string;
@@ -28,6 +35,8 @@ export interface StoredSecrets {
   linearApiKey?: string;
   /** PAT per repo (name without .git) */
   repoPats?: Record<string, string>;
+  /** TOTP 2FA config (only present when enabled). */
+  totp?: TotpStored;
 }
 
 function getSecretsPath(): string {
@@ -203,6 +212,25 @@ export function setRepoPat(repoName: string, pat: string): void {
   } else {
     s.repoPats[repoName] = pat.trim();
   }
+  writeAll(s);
+}
+
+// ─── TOTP helpers ────────────────────────────────────────────────────────────
+
+export function getTotpSecret(): TotpStored | null {
+  const s = readAll();
+  return s.totp ?? null;
+}
+
+export function setTotpSecret(secret: string): void {
+  const s = readAll();
+  s.totp = { secret, enabledAt: new Date().toISOString() };
+  writeAll(s);
+}
+
+export function clearTotpSecret(): void {
+  const s = readAll();
+  delete s.totp;
   writeAll(s);
 }
 
