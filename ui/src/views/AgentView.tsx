@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import type { Agent, GradeResult } from "../api";
 import { AgentMetadataPanel } from "../components/AgentMetadataPanel";
 import { AgentTerminal } from "../components/AgentTerminal";
+import { HooksConfigPanel } from "../components/HooksConfigPanel";
+import { ToolTimeline } from "../components/ToolTimeline";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { Header } from "../components/Header";
 import { type Attachment, PromptInput } from "../components/PromptInput";
@@ -414,6 +416,12 @@ export function AgentView({ agentId }: { agentId: string }) {
 
           {/* Metadata panel */}
           {id && <AgentMetadataPanel agentId={id} />}
+
+          {/* Tool timeline panel */}
+          {id && <ToolTimeline agentId={id} />}
+
+          {/* Hook rules panel */}
+          {id && <HooksConfigPanel agentId={id} />}
 
           {/* Disconnected warning banner */}
           {agent?.status === "disconnected" && (
