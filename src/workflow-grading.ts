@@ -18,13 +18,14 @@ export function gradeGate(g: GradeResult): "CREATE_PR" | "NEEDS_HUMAN" {
   return "CREATE_PR";
 }
 
+const RISK_SCORE: Record<string, number> = { low: 20, medium: 55, high: 90 };
+
 /**
- * Invert numericScore to a display-safe confidence value where higher = better.
- * grading.ts numericScore is 0-100 where higher = riskier.
+ * Derive a display-safe confidence value (higher = better) from overallRisk.
  * CRITICAL: overallRisk==='high' always yields confidence < 60 (the Medium threshold).
  */
 export function confidenceFromGrade(g: GradeResult): number {
-  return 100 - g.numericScore;
+  return 100 - (RISK_SCORE[g.overallRisk] ?? 50);
 }
 
 /** Build the prompt for the workflow grader agent (Opus, maxTurns:12, read-only). */
