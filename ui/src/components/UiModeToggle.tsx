@@ -41,9 +41,7 @@ export function UiModeToggle() {
             title={m.hint}
             className={[
               "rounded px-2.5 py-1 text-[11px] font-medium transition-colors",
-              active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground",
+              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
             ].join(" ")}
           >
             {m.label}

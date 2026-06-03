@@ -4,13 +4,13 @@ import { useCallback, useEffect, useState } from "react";
 import type { LinearWorkflow } from "../api";
 import { Header } from "../components/Header";
 import { Sidebar } from "../components/Sidebar";
+import { useToast } from "../components/Toast";
 import { UiModeToggle } from "../components/UiModeToggle";
-import { AgentRow } from "../components/workflow/AgentRow";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
+import { AgentRow } from "../components/workflow/AgentRow";
 import { useAgentPolling } from "../hooks/useAgentPolling";
 import { useApi } from "../hooks/useApi";
-import { useToast } from "../components/Toast";
 import { useKillSwitchContext } from "../killSwitch";
 
 function timeAgo(iso: string): string {
@@ -72,12 +72,8 @@ function WorkflowCard({ workflow, onCancel }: WorkflowCardProps) {
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            {issueId && (
-              <span className="text-xs font-mono text-muted-foreground">{issueId}</span>
-            )}
-            <Badge variant={WORKFLOW_STATUS_VARIANT[workflow.status]}>
-              {WORKFLOW_STATUS_LABELS[workflow.status]}
-            </Badge>
+            {issueId && <span className="text-xs font-mono text-muted-foreground">{issueId}</span>}
+            <Badge variant={WORKFLOW_STATUS_VARIANT[workflow.status]}>{WORKFLOW_STATUS_LABELS[workflow.status]}</Badge>
           </div>
           <p className="mt-1 text-xs text-muted-foreground truncate" title={workflow.repository}>
             {workflow.repository}
@@ -109,9 +105,7 @@ function WorkflowCard({ workflow, onCancel }: WorkflowCardProps) {
       </div>
 
       {/* Error message */}
-      {workflow.error && (
-        <p className="mb-2 text-xs text-destructive">{workflow.error}</p>
-      )}
+      {workflow.error && <p className="mb-2 text-xs text-destructive">{workflow.error}</p>}
 
       {/* Agent rows */}
       {workflow.agents.length > 0 && (
@@ -155,9 +149,7 @@ export function WorkflowsView() {
     async (id: string) => {
       try {
         await api.cancelWorkflow(id);
-        setWorkflows((prev) =>
-          prev.map((w) => (w.id === id ? { ...w, status: "cancelled" as const } : w)),
-        );
+        setWorkflows((prev) => prev.map((w) => (w.id === id ? { ...w, status: "cancelled" as const } : w)));
         toast("Workflow cancelled", "info");
       } catch {
         toast("Failed to cancel workflow", "error");
@@ -196,9 +188,7 @@ export function WorkflowsView() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Workflows</h1>
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  Linear ticket workflows managed by agent teams
-                </p>
+                <p className="mt-0.5 text-sm text-muted-foreground">Linear ticket workflows managed by agent teams</p>
               </div>
               <UiModeToggle />
             </div>
