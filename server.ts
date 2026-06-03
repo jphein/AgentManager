@@ -24,6 +24,7 @@ import hookConfigRouter from "./src/routes/hook-config";
 import { createKillSwitchRouter } from "./src/routes/kill-switch";
 import { createMcpRouter } from "./src/routes/mcp";
 import { createMessagesRouter } from "./src/routes/messages";
+import { createPullRequestsRouter } from "./src/routes/pull-requests";
 import { createRepoGateConfigRouter } from "./src/routes/repo-gate-config";
 import { createRepositoriesRouter } from "./src/routes/repositories";
 import { createSchedulerRouter } from "./src/routes/scheduler";
@@ -209,6 +210,7 @@ app.use(createSchedulerRouter(scheduler));
 app.use(createWorkflowsRouter(agentManager, messageBus));
 app.use(createRepoGateConfigRouter());
 app.use(createRepositoriesRouter(agentManager));
+app.use(createPullRequestsRouter(agentManager));
 app.use(createStartupRouter(agentManager, messageBus));
 app.use("/api/agents", hookConfigRouter);
 // Layer 1: Kill switch endpoint (no extra auth beyond authMiddleware above)
