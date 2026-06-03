@@ -1,4 +1,4 @@
-import { execFile, execFileSync, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { readdir, rm, unlink } from "node:fs/promises";
 import path from "node:path";
@@ -17,9 +17,10 @@ import { ALLOWED_MODELS, MAX_AGENT_DEPTH, MAX_AGENTS, MAX_CHILDREN_PER_AGENT, SE
 import { logger } from "./logger";
 import { DEFAULT_MODEL } from "./models";
 import { EVENTS_DIR, loadAllAgentStates, removeAgentState, saveAgentState, writeTombstone } from "./persistence";
+import { cleanupAllProcesses, killProcessGroup, ProcessManager } from "./process-manager";
 import { getRepoCredentialsForAgents, writeGitCredentialsFile } from "./repo-credentials";
 import { StateNotifier } from "./state-notifier";
-import { cleanupAgentClaudeData, debouncedSyncToGCS } from "./storage";
+import { cleanupAgentClaudeData } from "./storage";
 import type {
   Agent,
   AgentMetadata,
@@ -85,85 +86,6 @@ async function getGitInfo(
   }
 
   return result;
-}
-
-/** Harmless stderr noise from Claude CLI startup that should not surface as errors. */
-const STDERR_NOISE_RE = /apiKeyHelper did not return a valid value|Error getting API key from apiKeyHelper/;
-
-/** Kill a process group (SIGTERM), escalating to SIGKILL after a timeout.
- *  Uses negative PID to signal the entire process group. */
-function killProcessGroup(proc: ReturnType<typeof spawn>, timeoutMs = 5000): void {
-  if (proc.killed || proc.pid == null) return;
-  try {
-    process.kill(-proc.pid, "SIGTERM");
-  } catch {
-    // Process group already gone
-    return;
-  }
-  const escalation = setTimeout(() => {
-    try {
-      if (proc.pid) process.kill(-proc.pid, "SIGKILL");
-    } catch {
-      // Already dead
-    }
-  }, timeoutMs);
-  // Don't let this timer keep the event loop alive
-  escalation.unref();
-}
-
-/**
- * Kill ALL non-init, non-server processes.
- * Used by emergencyDestroyAll() to catch bash/node/curl/git spawned by agents
- * that aren't tracked in our process map. Only kills descendants of agentRootPids
- * (and the roots themselves), not unrelated system processes.
- */
-function cleanupAllProcesses(agentRootPids: number[]): void {
-  if (agentRootPids.length === 0) return;
-  try {
-    const myPid = process.pid;
-    const output = execFileSync("ps", ["-eo", "pid,ppid,comm"], {
-      encoding: "utf-8",
-      timeout: 5_000,
-    });
-    const rootSet = new Set(agentRootPids.filter((p) => p > 0));
-    const pidToPpid = new Map<number, number>();
-    for (const line of output.split("\n")) {
-      const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
-      if (!match) continue;
-      const [, pidStr, ppidStr] = match;
-      const pid = Number.parseInt(pidStr, 10);
-      const ppid = Number.parseInt(ppidStr, 10);
-      if (pid === 1 || pid === myPid) continue;
-      pidToPpid.set(pid, ppid);
-    }
-    // Collect all descendant PIDs (BFS from roots)
-    const toKill = new Set<number>(rootSet);
-    let frontier = [...rootSet];
-    while (frontier.length > 0) {
-      const next: number[] = [];
-      for (const pid of frontier) {
-        for (const [cpid, ppid] of pidToPpid) {
-          if (ppid === pid) next.push(cpid);
-        }
-      }
-      for (const p of next) toKill.add(p);
-      frontier = next;
-    }
-    let killed = 0;
-    for (const pid of toKill) {
-      try {
-        process.kill(pid, "SIGKILL");
-        killed++;
-      } catch {
-        // Already dead or no permission - skip
-      }
-    }
-    if (killed > 0) {
-      logger.info(`[kill-switch] cleanupAllProcesses: killed ${killed} process(es)`);
-    }
-  } catch {
-    // ps not available - skip
-  }
 }
 
 const NAME_STOP_WORDS = new Set([
@@ -275,6 +197,7 @@ export class AgentManager {
   private costTracker: CostTracker | null = null;
   private usageTracker: UsageTracker;
   private pipeline: EventPipeline;
+  private processManager: ProcessManager;
   /** Workspace management (directories, symlinks, tokens, env). */
   private workspace = new WorkspaceManager();
 
@@ -285,6 +208,13 @@ export class AgentManager {
     this.pipeline = new EventPipeline(this.agents, this.usageTracker, this.writeQueues, (id, agent, immediate) =>
       this.notifier.scheduleAgentUpdated(id, agent, immediate),
     );
+    this.processManager = new ProcessManager(this.agents, this.pipeline, {
+      onAgentUpdated: (id, agent, immediate) => this.notifier.scheduleAgentUpdated(id, agent, immediate),
+      onIdle: (id) => this.notifyIdleListeners(id),
+      onEphemeralIdle: (_id) => {
+        // ephemeral auto-destroy wired in PR28 (ephemeral-cleanup.ts)
+      },
+    });
     this.workspace.setAgentListProvider(this);
     // Cleanup idle agents every 60s
     this.cleanupInterval = setInterval(() => this.cleanupExpired(), 60_000);
@@ -444,19 +374,12 @@ export class AgentManager {
       attachmentNames = names;
     }
 
-    const args = this.buildClaudeArgs({ ...opts, prompt: finalPrompt }, model);
+    const args = this.processManager.buildClaudeArgs({ ...opts, prompt: finalPrompt }, model);
     const env = this.workspace.buildEnv(id, workspaceDir);
-
-    const proc = spawn("claude", args, {
-      env,
-      cwd: workspaceDir,
-      stdio: ["ignore", "pipe", "pipe"],
-      detached: true,
-    });
 
     const agentProc: AgentProcess = {
       agent,
-      proc,
+      proc: null,
       lineBuffer: "",
       listeners: new Set(),
       seenMessageIds: new Set(),
@@ -482,7 +405,8 @@ export class AgentManager {
       attachmentNames: attachmentNames.length > 0 ? attachmentNames : undefined,
     });
 
-    this.attachProcessHandlers(id, agentProc, proc);
+    const proc = this.processManager.spawnProcess(id, agentProc, args, env, workspaceDir);
+    agentProc.proc = proc;
 
     // Update status to running once we get first output
     proc.stdout?.once("data", () => {
@@ -559,7 +483,7 @@ export class AgentManager {
     const resumeId = targetSessionId || agentProc.agent.claudeSessionId || undefined;
 
     const model = agentProc.agent.model;
-    const args = this.buildClaudeArgs(
+    const args = this.processManager.buildClaudeArgs(
       {
         prompt,
         maxTurns,
@@ -575,7 +499,7 @@ export class AgentManager {
     // This prevents event interleaving from the old process's close handler
     // firing after the new process has already started.
     const oldProc = agentProc.proc;
-    const killOld: Promise<void> = oldProc ? this.killAndWait(oldProc, agentProc, id) : Promise.resolve();
+    const killOld: Promise<void> = oldProc ? this.processManager.killAndWait(oldProc, agentProc) : Promise.resolve();
 
     agentProc.lineBuffer = "";
 
@@ -600,19 +524,12 @@ export class AgentManager {
         const ap = this.agents.get(id);
         if (!ap) return;
 
-        const proc = spawn("claude", args, {
-          env,
-          cwd: ap.agent.workspaceDir,
-          stdio: ["ignore", "pipe", "pipe"],
-          detached: true,
-        });
+        const proc = this.processManager.spawnProcess(id, ap, args, env, ap.agent.workspaceDir);
 
         ap.proc = proc;
         ap.agent.status = "running";
         ap.agent.lastActivity = nowISO();
         saveAgentState(ap.agent);
-
-        this.attachProcessHandlers(id, ap, proc);
       });
     const lockPromise = spawnAfterKill.catch((err) => {
       logger.error("[agents] Error spawning agent", { agentId: id, error: errorMessage(err) });
@@ -642,34 +559,6 @@ export class AgentManager {
     };
 
     return { agent: agentProc.agent, subscribe };
-  }
-
-  /** Kill a process and wait for it to fully exit. Sets transitional 'killing' state. */
-  private killAndWait(proc: ReturnType<typeof spawn>, agentProc: AgentProcess, _agentId: string): Promise<void> {
-    return new Promise<void>((resolve) => {
-      // Detach old handlers so close doesn't trigger idle/state transitions
-      proc.stdout?.removeAllListeners();
-      proc.stderr?.removeAllListeners();
-      proc.removeAllListeners("close");
-
-      if (proc.killed || proc.exitCode !== null) {
-        resolve();
-        return;
-      }
-
-      agentProc.agent.status = "killing";
-
-      proc.once("close", () => {
-        resolve();
-      });
-
-      // Use process group kill (SIGTERM then SIGKILL escalation) from killProcessGroup
-      killProcessGroup(proc);
-
-      // Safety timeout - resolve even if close never fires
-      const safety = setTimeout(() => resolve(), 6_000);
-      safety.unref();
-    });
   }
 
   list(): Agent[] {
@@ -1204,117 +1093,6 @@ export class AgentManager {
     return dirs;
   }
 
-  /** Attach stdout/stderr/close handlers to a spawned process.
-   *  Uses batched line processing (WI-1) to prevent event loop saturation
-   *  when many agents produce output simultaneously. */
-  private attachProcessHandlers(id: string, agentProc: AgentProcess, proc: ReturnType<typeof spawn>): void {
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      agentProc.lineBuffer += chunk.toString();
-
-      // Backpressure: pause stdout if lineBuffer exceeds 1 MB to prevent
-      // unbounded memory growth when agents produce output faster than we parse
-      if (agentProc.lineBuffer.length > 1_048_576 && proc.stdout) {
-        proc.stdout.pause();
-      }
-
-      // Schedule batch processing on next tick instead of processing synchronously
-      // in the data handler. This yields the event loop between data chunks so
-      // SSE heartbeats and API responses can be served.
-      if (!agentProc.processingScheduled) {
-        agentProc.processingScheduled = true;
-        setImmediate(() => this.processLineBuffer(id, agentProc, proc));
-      }
-    });
-
-    proc.stderr?.on("data", (d: Buffer) => {
-      const text = d.toString();
-      if (STDERR_NOISE_RE.test(text)) return;
-      this.handleEvent(id, { type: "stderr", text });
-    });
-
-    proc.on("close", (code) => {
-      // Flush any remaining data in the line buffer (e.g. final result event
-      // from the CLI that may not have a trailing newline)
-      if (agentProc.lineBuffer.trim()) {
-        try {
-          const event = JSON.parse(agentProc.lineBuffer) as StreamEvent;
-          this.handleEvent(id, event);
-        } catch {
-          this.handleEvent(id, { type: "raw", text: agentProc.lineBuffer });
-        }
-        agentProc.lineBuffer = "";
-      }
-
-      this.handleEvent(id, { type: "done", exitCode: code ?? undefined });
-
-      // Flush any pending batches immediately on close - listeners need
-      // to see events (especially "done") before state transitions happen
-      this.flushEventBatch(id, agentProc);
-
-      const ap = this.agents.get(id);
-      if (ap) {
-        ap.agent.status = code === 0 ? "idle" : "error";
-        ap.agent.lastActivity = nowISO();
-        saveAgentState(ap.agent);
-      }
-      debouncedSyncToGCS().catch((err) => {
-        logger.error("[agents] Failed to sync GCS after agent exit", { agentId: id, error: errorMessage(err) });
-      });
-
-      // Notify idle listeners so queued messages can be delivered
-      if (code === 0) {
-        this.notifyIdleListeners(id);
-      }
-    });
-  }
-
-  /** Process buffered stdout lines in batches of 50, yielding to the event
-   *  loop between batches via setImmediate. This prevents a burst of output
-   *  from one agent from starving SSE heartbeats and API requests. */
-  private processLineBuffer(id: string, agentProc: AgentProcess, proc: ReturnType<typeof spawn>): void {
-    agentProc.processingScheduled = false;
-
-    // Agent may have been destroyed while processing was queued via setImmediate
-    if (!this.agents.has(id)) return;
-
-    const lines = agentProc.lineBuffer.split("\n");
-    agentProc.lineBuffer = lines.pop() || "";
-
-    const BATCH_SIZE = 50;
-    let offset = 0;
-
-    const processBatch = () => {
-      // Agent may have been destroyed while processing was queued
-      if (!this.agents.has(id)) return;
-
-      const end = Math.min(offset + BATCH_SIZE, lines.length);
-      for (let i = offset; i < end; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line) as StreamEvent;
-          this.handleEvent(id, event);
-        } catch {
-          this.handleEvent(id, { type: "raw", text: line });
-        }
-      }
-
-      offset = end;
-
-      if (offset < lines.length) {
-        // More lines to process - yield to event loop then continue
-        setImmediate(processBatch);
-      } else {
-        // Done processing - resume stdout if paused due to backpressure
-        if (proc.stdout?.isPaused?.()) {
-          proc.stdout.resume();
-        }
-      }
-    };
-
-    processBatch();
-  }
-
   /** Handle a single event: extract metadata immediately, batch persistence
    *  and listener notification. Metadata (session_id, usage) is processed
    *  synchronously since it affects agent state. Disk writes and listener
@@ -1473,27 +1251,6 @@ export class AgentManager {
       saveAgentState(agentProc.agent);
     }
     this.pipeline.truncateEventFiles(this.agents.keys());
-  }
-
-  private buildClaudeArgs(opts: CreateAgentRequest, model: string, resumeSessionId?: string): string[] {
-    const args: string[] = [];
-    if (opts.dangerouslySkipPermissions) {
-      args.push("--dangerously-skip-permissions");
-    }
-    args.push(
-      "--output-format",
-      "stream-json",
-      "--verbose",
-      "--max-turns",
-      String(opts.maxTurns ?? 200),
-      "--model",
-      model,
-    );
-    if (resumeSessionId) {
-      args.push("--resume", resumeSessionId);
-    }
-    args.push("--print", "--", opts.prompt);
-    return args;
   }
 
   /** Save attachments to the agent workspace.
