@@ -1,19 +1,9 @@
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { appendFile, readdir, readFile, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { readdir, rm, unlink } from "node:fs/promises";
 import path from "node:path";
-import readline from "node:readline";
 import { promisify } from "node:util";
-import {
-  AGENT_DEDUP_WINDOW_MS,
-  EVENT_FILE_TRUNCATE_THRESHOLD,
-  EVENT_RING_BUFFER_SIZE,
-  MAX_PERSISTED_EVENTS,
-  PAUSED_TTL_MS,
-  PROMPT_NAME_MAX_INPUT,
-  PROMPT_NAME_MAX_SLUG,
-} from "./config";
+import { AGENT_DEDUP_WINDOW_MS, PAUSED_TTL_MS, PROMPT_NAME_MAX_INPUT, PROMPT_NAME_MAX_SLUG } from "./config";
 import type { CostTracker } from "./cost-tracker";
 import {
   AgentNotFoundError,
@@ -22,12 +12,12 @@ import {
   ResourceLimitError,
   ValidationError,
 } from "./errors";
+import { EventPipeline } from "./event-pipeline";
 import { ALLOWED_MODELS, MAX_AGENT_DEPTH, MAX_AGENTS, MAX_CHILDREN_PER_AGENT, SESSION_TTL_MS } from "./guardrails";
 import { logger } from "./logger";
 import { DEFAULT_MODEL } from "./models";
 import { EVENTS_DIR, loadAllAgentStates, removeAgentState, saveAgentState, writeTombstone } from "./persistence";
 import { getRepoCredentialsForAgents, writeGitCredentialsFile } from "./repo-credentials";
-import { sanitizeEvent } from "./sanitize";
 import { StateNotifier } from "./state-notifier";
 import { cleanupAgentClaudeData, debouncedSyncToGCS } from "./storage";
 import type {
@@ -41,7 +31,7 @@ import type {
   StreamEvent,
 } from "./types";
 import { errorMessage } from "./types";
-import { estimateCost, UsageTracker } from "./usage-tracker";
+import { UsageTracker } from "./usage-tracker";
 import { WorkspaceManager } from "./workspace-manager";
 import { cleanupWorktreesForWorkspace } from "./worktrees";
 
@@ -284,6 +274,7 @@ export class AgentManager {
   /** Optional persistent cost tracker (SQLite-backed). */
   private costTracker: CostTracker | null = null;
   private usageTracker: UsageTracker;
+  private pipeline: EventPipeline;
   /** Workspace management (directories, symlinks, tokens, env). */
   private workspace = new WorkspaceManager();
 
@@ -291,6 +282,9 @@ export class AgentManager {
     this.costTracker = opts?.costTracker ?? null;
     this.usageTracker = new UsageTracker(this.agents, this.costTracker);
     this.notifier = new StateNotifier(this.agents);
+    this.pipeline = new EventPipeline(this.agents, this.usageTracker, this.writeQueues, (id, agent, immediate) =>
+      this.notifier.scheduleAgentUpdated(id, agent, immediate),
+    );
     this.workspace.setAgentListProvider(this);
     // Cleanup idle agents every 60s
     this.cleanupInterval = setInterval(() => this.cleanupExpired(), 60_000);
@@ -1327,229 +1321,24 @@ export class AgentManager {
    *  notifications are coalesced into 16 ms batches to reduce I/O calls and
    *  SSE write pressure. */
   private handleEvent(id: string, event: StreamEvent): void {
-    const agentProc = this.agents.get(id);
-    if (!agentProc) return;
-
-    if (event.type === "system" && event.subtype === "init" && event.session_id) {
-      agentProc.agent.claudeSessionId = event.session_id as string;
-      saveAgentState(agentProc.agent);
-    }
-
-    // Parse token usage from assistant events emitted by claude CLI stream-json.
-    // The CLI emits multiple "assistant" events per API message (one per content block),
-    // each carrying the same usage snapshot. We deduplicate by message ID so each
-    // API call's tokens are counted exactly once.
-    if (event.type === "assistant") {
-      // Fix H1: Reset stallCount when real output arrives from a stalled agent
-      if (agentProc.agent.status === "stalled" && (event.subtype === "text" || event.subtype === "tool_use")) {
-        agentProc.stallCount = 0;
-        agentProc.agent.status = "running";
-        saveAgentState(agentProc.agent);
-      }
-
-      const msg = event.message as Record<string, unknown> | undefined;
-      const msgId = msg?.id as string | undefined;
-      const usage = msg?.usage as
-        | {
-            input_tokens?: number;
-            output_tokens?: number;
-            cache_creation_input_tokens?: number;
-            cache_read_input_tokens?: number;
-          }
-        | undefined;
-
-      if (msgId && usage && !agentProc.seenMessageIds.has(msgId)) {
-        agentProc.seenMessageIds.add(msgId);
-
-        // Cap seenMessageIds to prevent unbounded growth (Performance H2)
-        if (agentProc.seenMessageIds.size > 1000) {
-          const arr = Array.from(agentProc.seenMessageIds);
-          agentProc.seenMessageIds = new Set(arr.slice(-500));
-        }
-
-        const tokensIn =
-          (usage.input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
-        const tokensOut = usage.output_tokens ?? 0;
-        const cost = estimateCost(agentProc.agent.model, usage);
-
-        if (tokensIn > 0 || tokensOut > 0) {
-          const prev = agentProc.agent.usage ?? { tokensIn: 0, tokensOut: 0, estimatedCost: 0, totalTokensSpent: 0 };
-          agentProc.agent.usage = {
-            tokensIn: prev.tokensIn + tokensIn,
-            tokensOut: prev.tokensOut + tokensOut,
-            estimatedCost: prev.estimatedCost + cost,
-            totalTokensSpent: (prev.totalTokensSpent ?? 0) + tokensIn + tokensOut,
-            totalTokensIn: (prev.totalTokensIn ?? prev.tokensIn) + tokensIn,
-            totalTokensOut: (prev.totalTokensOut ?? prev.tokensOut) + tokensOut,
-          };
-          saveAgentState(agentProc.agent);
-          this.upsertCostTracker(agentProc);
-        }
-      }
-    }
-
-    // Handle result events for token-delta updates
-    if (event.type === "result") {
-      const usage = event.usage as { input_tokens?: number; output_tokens?: number } | undefined;
-      const totalCost = typeof event.total_cost_usd === "number" ? event.total_cost_usd : 0;
-      const tokensIn = usage?.input_tokens ?? 0;
-      const tokensOut = usage?.output_tokens ?? 0;
-      if (tokensIn > 0 || tokensOut > 0 || totalCost > 0) {
-        const prev = agentProc.agent.usage ?? { tokensIn: 0, tokensOut: 0, estimatedCost: 0, totalTokensSpent: 0 };
-        // Compute delta for totalTokensSpent: result events report cumulative input tokens
-        // (full context window), so only count the incremental difference to avoid double-counting.
-        const inputDelta = tokensIn > prev.tokensIn ? tokensIn - prev.tokensIn : 0;
-        agentProc.agent.usage = {
-          // tokensIn is NOT accumulated: each result event's input_tokens already contains
-          // the full conversation context, so summing across turns massively overcounts.
-          // Instead we store the latest value, which reflects current context window usage.
-          tokensIn: tokensIn > 0 ? tokensIn : prev.tokensIn,
-          tokensOut: prev.tokensOut + tokensOut,
-          estimatedCost: prev.estimatedCost + totalCost,
-          totalTokensSpent: (prev.totalTokensSpent ?? 0) + inputDelta + tokensOut,
-          totalTokensIn: (prev.totalTokensIn ?? prev.tokensIn) + inputDelta,
-          totalTokensOut: (prev.totalTokensOut ?? prev.tokensOut) + tokensOut,
-        };
-        saveAgentState(agentProc.agent);
-        this.upsertCostTracker(agentProc);
-      }
-    }
-
-    agentProc.agent.lastActivity = nowISO();
-
-    // Batch persist: accumulate sanitized JSONL lines and flush with 16ms timer.
-    // This turns N appendFile calls into 1, reducing I/O syscalls dramatically.
-    const sanitized = sanitizeEvent(event);
-    agentProc.persistBatch += `${JSON.stringify(sanitized)}\n`;
-
-    // Append to in-memory ring buffer for fast reconnect replay.
-    // Uses modular overwrite once the buffer reaches EVENT_RING_BUFFER_SIZE.
-    if (agentProc.eventBuffer.length < EVENT_RING_BUFFER_SIZE) {
-      agentProc.eventBuffer.push(sanitized);
-    } else {
-      agentProc.eventBuffer[agentProc.eventBufferTotal % EVENT_RING_BUFFER_SIZE] = sanitized;
-    }
-    agentProc.eventBufferTotal++;
-
-    // Batch listener notification: buffer events for 16ms (one frame) before
-    // notifying SSE listeners, reducing the number of res.write() calls.
-    agentProc.listenerBatch.push(event);
-
-    if (!agentProc.persistTimer) {
-      agentProc.persistTimer = setTimeout(() => this.flushEventBatch(id, agentProc), 16);
-    }
+    this.pipeline.handleEvent(id, event);
   }
 
   private upsertCostTracker(agentProc: AgentProcess): void {
     this.usageTracker.upsertCostTracker(agentProc);
   }
 
-  /** Flush batched event persistence and listener notifications for an agent.
-   *  Called by the 16ms coalesce timer or synchronously on process close. */
   private flushEventBatch(id: string, agentProc: AgentProcess): void {
-    // Clear timer
-    if (agentProc.persistTimer) {
-      clearTimeout(agentProc.persistTimer);
-      agentProc.persistTimer = null;
-    }
-
-    // Flush persistence batch - single appendFile for all accumulated events
-    const batch = agentProc.persistBatch;
-    agentProc.persistBatch = "";
-    if (batch) {
-      const filePath = path.join(EVENTS_DIR, `${id}.jsonl`);
-      const prev = this.writeQueues.get(id) ?? Promise.resolve();
-      const next = prev
-        .then(() =>
-          appendFile(filePath, batch).catch((err: unknown) => {
-            logger.warn("[agents] Failed to persist events", { agentId: id, error: errorMessage(err) });
-          }),
-        )
-        .then(() => {
-          if (this.writeQueues.get(id) === next) {
-            this.writeQueues.set(id, Promise.resolve());
-          }
-        });
-      this.writeQueues.set(id, next);
-    }
-
-    // Flush listener batch - notify all listeners with buffered events
-    const events = agentProc.listenerBatch;
-    agentProc.listenerBatch = [];
-    if (events.length > 0) {
-      for (const event of events) {
-        for (const listener of agentProc.listeners) {
-          try {
-            listener(event);
-          } catch (err: unknown) {
-            logger.warn("[agents] Listener error", { error: errorMessage(err) });
-          }
-        }
-      }
-    }
+    this.pipeline.flushEventBatch(id, agentProc);
   }
 
-  /** Read the in-memory ring buffer in insertion order. */
   private readEventBuffer(agentProc: AgentProcess): StreamEvent[] {
-    const { eventBuffer, eventBufferTotal } = agentProc;
-    const len = eventBuffer.length;
-    if (len === 0) return [];
-    // Buffer hasn't wrapped yet - return as-is
-    if (eventBufferTotal <= EVENT_RING_BUFFER_SIZE) return eventBuffer.slice();
-    // Buffer has wrapped - oldest entry is at (eventBufferTotal % len), read in order
-    const start = eventBufferTotal % len;
-    return [...eventBuffer.slice(start), ...eventBuffer.slice(0, start)];
+    return this.pipeline.readEventBuffer(agentProc);
   }
 
-  /** Hybrid event reader: serves from in-memory ring buffer for hot reconnects,
-   *  falls back to streaming readline from disk for cold-start (restored) agents. */
   private async readPersistedEvents(id: string): Promise<StreamEvent[]> {
-    // Hot path: if the agent has events in its ring buffer, serve from memory
-    const agentProc = this.agents.get(id);
-    if (agentProc && agentProc.eventBufferTotal > 0) {
-      return this.readEventBuffer(agentProc);
-    }
-
-    // Cold path: stream from disk using readline (bounded memory)
-    const filePath = path.join(EVENTS_DIR, `${id}.jsonl`);
-    try {
-      await stat(filePath);
-    } catch {
-      return [];
-    }
-
-    try {
-      const events: StreamEvent[] = [];
-      const rl = readline.createInterface({
-        input: createReadStream(filePath, { encoding: "utf-8" }),
-        crlfDelay: Number.POSITIVE_INFINITY,
-      });
-      for await (const line of rl) {
-        if (!line.trim()) continue;
-        try {
-          events.push(JSON.parse(line) as StreamEvent);
-        } catch {
-          // Skip malformed lines
-        }
-      }
-
-      // Trim to last MAX_PERSISTED_EVENTS in one pass (avoids O(n*k) per-line splice)
-      if (events.length > MAX_PERSISTED_EVENTS) {
-        events.splice(0, events.length - MAX_PERSISTED_EVENTS);
-      }
-
-      // Populate the ring buffer so subsequent reconnects are served from memory
-      if (agentProc) {
-        const bufferEvents = events.slice(-EVENT_RING_BUFFER_SIZE);
-        agentProc.eventBuffer = bufferEvents;
-        agentProc.eventBufferTotal = bufferEvents.length;
-      }
-
-      return events;
-    } catch (err: unknown) {
-      logger.warn("[agents] Failed to read persisted events", { agentId: id, error: errorMessage(err) });
-      return [];
-    }
+    const { events } = await this.pipeline.readPersistedEvents(id);
+    return events;
   }
 
   private cleanupExpired(): void {
@@ -1683,33 +1472,7 @@ export class AgentManager {
     for (const agentProc of this.agents.values()) {
       saveAgentState(agentProc.agent);
     }
-    this.truncateEventFiles();
-  }
-
-  /** Truncate oversized event files to prevent unbounded growth on GCS FUSE. */
-  private truncateEventFiles(): void {
-    for (const id of this.agents.keys()) {
-      const filePath = path.join(EVENTS_DIR, `${id}.jsonl`);
-      const prev = this.writeQueues.get(id) ?? Promise.resolve();
-      const next = prev.then(async () => {
-        try {
-          const fileStat = await stat(filePath).catch(() => null);
-          if (!fileStat) return;
-          if (fileStat.size < EVENT_FILE_TRUNCATE_THRESHOLD * 200) return;
-          const data = await readFile(filePath, "utf-8");
-          const lines = data.split("\n").filter((l) => l.trim());
-          if (lines.length <= EVENT_FILE_TRUNCATE_THRESHOLD) return;
-          const trimmed = lines.slice(-MAX_PERSISTED_EVENTS);
-          const tmpPath = `${filePath}.tmp.${Date.now()}`;
-          await writeFile(tmpPath, `${trimmed.join("\n")}\n`);
-          await rename(tmpPath, filePath);
-          logger.info("[agents] Truncated event file", { agentId: id, before: lines.length, after: trimmed.length });
-        } catch (err: unknown) {
-          logger.warn("[agents] Failed to truncate events", { agentId: id, error: errorMessage(err) });
-        }
-      });
-      this.writeQueues.set(id, next);
-    }
+    this.pipeline.truncateEventFiles(this.agents.keys());
   }
 
   private buildClaudeArgs(opts: CreateAgentRequest, model: string, resumeSessionId?: string): string[] {
