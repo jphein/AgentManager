@@ -18,6 +18,7 @@ import { createAgentsRouter } from "./src/routes/agents";
 import { createAuthRouter } from "./src/routes/auth";
 import { createConfigRouter } from "./src/routes/config";
 import { createContextRouter } from "./src/routes/context";
+import { createContextPolicyRouter } from "./src/routes/context-policy";
 import { createCostRouter } from "./src/routes/cost";
 import { createHealthRouter } from "./src/routes/health";
 import hookConfigRouter from "./src/routes/hook-config";
@@ -209,6 +210,7 @@ app.use(createSchedulerRouter(scheduler));
 app.use(createWorkflowsRouter(agentManager, messageBus));
 app.use(createRepoGateConfigRouter());
 app.use(createRepositoriesRouter(agentManager));
+app.use(createContextPolicyRouter());
 app.use(createStartupRouter(agentManager, messageBus));
 app.use("/api/agents", hookConfigRouter);
 // Layer 1: Kill switch endpoint (no extra auth beyond authMiddleware above)
