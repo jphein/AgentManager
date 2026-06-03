@@ -69,6 +69,7 @@ function makePR(overrides: Partial<PullRequestItem> = {}): PullRequestItem {
     author: "agent-001",
     additions: 10,
     deletions: 2,
+    createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     checksStatus: "passing",
     reviewDecision: "REVIEW_REQUIRED",
