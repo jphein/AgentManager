@@ -1,120 +1,35 @@
 import type { ChildProcess } from "node:child_process";
 import type { Request } from "express";
+import type { MessageType, StreamEvent } from "./shared/types";
 
-export type AgentStatus =
-  | "starting"
-  | "running"
-  | "idle"
-  | "error"
-  | "restored"
-  | "killing"
-  | "destroying"
-  | "paused"
-  | "stalled"
-  | "disconnected";
+export type {
+  Agent,
+  AgentDefinition,
+  AgentMessage,
+  AgentMetadata,
+  AgentStateEvent,
+  AgentStatus,
+  AgentUsage,
+  AssignmentDecision,
+  CreateAgentRequest,
+  MessageType,
+  OrchestratorEvent,
+  PromptAttachment,
+  StreamEvent,
+  TaskMessage,
+  TaskNode,
+  TaskPriority,
+  TaskResult,
+  TaskStatus,
+} from "./shared/types";
+export { errorMessage } from "./shared/types";
 
-export interface AgentUsage {
-  tokensIn: number;
-  tokensOut: number;
-  tokensTotal: number;
-  tokenLimit: number;
-  tokensRemaining: number;
-  estimatedCost: number;
-  model: string;
-  sessionStart: string;
-}
-
-export interface Agent {
-  id: string;
-  name: string;
-  status: AgentStatus;
-  workspaceDir: string;
-  /** If true, Claude CLI runs with --dangerously-skip-permissions for this agent. */
-  dangerouslySkipPermissions?: boolean;
-  claudeSessionId?: string;
-  createdAt: string;
-  lastActivity: string;
-  model: string;
-  role?: string;
-  capabilities?: string[];
-  currentTask?: string;
-  parentId?: string;
-  /** Spawn depth, set immutably at creation time. Depth 1 = top-level agent. */
-  depth: number;
-  /** Cached git info (populated asynchronously after spawn). */
-  gitBranch?: string;
-  gitRepo?: string;
-  gitWorktree?: string;
-  /** Cumulative token usage across all sessions for this agent. */
-  usage?: {
-    tokensIn: number;
-    tokensOut: number;
-    estimatedCost: number;
-    /** Cumulative total tokens (in+out) across all contexts, never reset by clear-context. */
-    totalTokensSpent: number;
-    /** Cumulative input tokens across all contexts, never reset by clear-context. */
-    totalTokensIn?: number;
-    /** Cumulative output tokens across all contexts, never reset by clear-context. */
-    totalTokensOut?: number;
-  };
-}
-
-export type MessageType = "task" | "result" | "question" | "info" | "status" | "interrupt";
-
-/** Valid message types for runtime validation (single source of truth with MessageType). */
+/** Valid message types for runtime validation */
 export const VALID_MESSAGE_TYPES: MessageType[] = ["task", "result", "question", "info", "status", "interrupt"];
 
-export interface AgentMessage {
-  id: string;
-  from: string;
-  fromName?: string;
-  to?: string;
-  channel?: string;
-  type: MessageType;
-  content: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-  readBy: string[];
-  excludeRoles?: string[];
-}
-
-export interface StreamEvent {
-  type: string;
-  subtype?: string;
-  session_id?: string;
-  message?: string;
-  tool?: string;
-  content?: string;
-  result?: string;
-  text?: string;
-  exitCode?: number;
-  [key: string]: unknown;
-}
-
-export interface CreateAgentRequest {
-  prompt: string;
-  name?: string;
-  model?: string;
-  maxTurns?: number;
-  role?: string;
-  capabilities?: string[];
-  parentId?: string;
-  attachments?: PromptAttachment[];
-  /** When true, passes --dangerously-skip-permissions to the Claude CLI, bypassing all
-   *  permission confirmations. Defaults to false (agents must confirm tool use). */
-  dangerouslySkipPermissions?: boolean;
-}
-
-export interface PromptAttachment {
-  name: string;
-  type: "image" | "file";
-  /** Data URL for images, text content for files */
-  data: string;
-  mime: string;
-}
-
+/** Server-only: Internal agent process tracking state */
 export interface AgentProcess {
-  agent: Agent;
+  agent: import("./shared/types").Agent;
   proc: ChildProcess | null;
   lineBuffer: string;
   listeners: Set<(event: StreamEvent) => void>;
@@ -134,20 +49,14 @@ export interface AgentProcess {
   eventBuffer: StreamEvent[];
   /** Total number of events ever appended (used to compute ring buffer offset). */
   eventBufferTotal: number;
-}
-
-export interface AgentMetadata {
-  pid: number | null;
-  uptime: number;
-  workingDir: string;
-  repo: string | null;
-  branch: string | null;
-  worktreePath: string | null;
-  tokensIn: number;
-  tokensOut: number;
-  estimatedCost: number;
-  model: string;
-  sessionId: string | null;
+  /** Session-level cost accumulated from assistant events. */
+  sessionEstimatedCost?: number;
+  /** Session-level input tokens accumulated from assistant events. */
+  sessionTokensIn?: number;
+  /** Session-level output tokens accumulated from assistant events. */
+  sessionTokensOut?: number;
+  /** Path to the temporary JSON schema file written for --json-schema. */
+  jsonSchemaPath?: string;
 }
 
 export interface AuthPayload {
@@ -160,9 +69,4 @@ export interface AuthPayload {
 /** Express Request with authenticated user context attached by authMiddleware */
 export interface AuthenticatedRequest extends Request {
   user?: AuthPayload;
-}
-
-/** Safely extract an error message from an unknown catch value */
-export function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
