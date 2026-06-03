@@ -1027,13 +1027,13 @@ export function createApi(authFetch: AuthFetch) {
     // ─── TOTP 2FA ─────────────────────────────────────────────────────────
 
     async getTotpStatus(): Promise<{ enabled: boolean; enabledAt: string | null }> {
-      const res = await authFetch("/api/auth/totp/status");
+      const res = await authFetch("/api/settings/totp/status");
       if (!res.ok) throw new Error("Failed to get TOTP status");
       return res.json();
     },
 
     async setupTotp(): Promise<{ secret: string; uri: string }> {
-      const res = await authFetch("/api/auth/totp/setup", { method: "POST" });
+      const res = await authFetch("/api/settings/totp/setup", { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error((data as { error?: string }).error || "Failed to initiate TOTP setup");
@@ -1042,7 +1042,7 @@ export function createApi(authFetch: AuthFetch) {
     },
 
     async verifyTotp(secret: string, code: string): Promise<{ ok: boolean; enabledAt: string }> {
-      const res = await authFetch("/api/auth/totp/verify", {
+      const res = await authFetch("/api/settings/totp/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret, code }),
@@ -1055,8 +1055,8 @@ export function createApi(authFetch: AuthFetch) {
     },
 
     async disableTotp(code: string): Promise<{ ok: boolean }> {
-      const res = await authFetch("/api/auth/totp/disable", {
-        method: "DELETE",
+      const res = await authFetch("/api/settings/totp/disable", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code }),
       });
