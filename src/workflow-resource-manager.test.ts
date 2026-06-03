@@ -37,12 +37,12 @@ describe("computeWorkflowActualCost", () => {
       a1: { usage: { estimatedCost: 1.5 }, status: "idle", lastActivity: new Date().toISOString() },
       a2: { usage: { estimatedCost: 0.5 }, status: "idle", lastActivity: new Date().toISOString() },
     });
-    expect(computeWorkflowActualCost(["a1", "a2"], am as any)).toBe(2);
+    expect(computeWorkflowActualCost(["a1", "a2"], am as unknown)).toBe(2);
   });
 
   it("treats missing agents as 0 cost", () => {
     const am = makeAgentManager({});
-    expect(computeWorkflowActualCost(["missing"], am as any)).toBe(0);
+    expect(computeWorkflowActualCost(["missing"], am as unknown)).toBe(0);
   });
 });
 
@@ -52,7 +52,7 @@ describe("enforceWorkflowCostCap", () => {
     const am = makeAgentManager({
       a1: { usage: { estimatedCost: 5 }, status: "idle", lastActivity: new Date().toISOString() },
     });
-    enforceWorkflowCostCap("wf1", ["a1"], 2, am as any, onCap);
+    enforceWorkflowCostCap("wf1", ["a1"], 2, am as unknown, onCap);
     expect(onCap).toHaveBeenCalledWith("wf1", 5, 2 * WORKFLOW_COST_CAP_MULTIPLIER);
   });
 
@@ -61,7 +61,7 @@ describe("enforceWorkflowCostCap", () => {
     const am = makeAgentManager({
       a1: { usage: { estimatedCost: 1 }, status: "idle", lastActivity: new Date().toISOString() },
     });
-    enforceWorkflowCostCap("wf1", ["a1"], 10, am as any, onCap);
+    enforceWorkflowCostCap("wf1", ["a1"], 10, am as unknown, onCap);
     expect(onCap).not.toHaveBeenCalled();
   });
 
@@ -70,7 +70,7 @@ describe("enforceWorkflowCostCap", () => {
     const am = makeAgentManager({
       a1: { usage: { estimatedCost: 999 }, status: "idle", lastActivity: new Date().toISOString() },
     });
-    enforceWorkflowCostCap("wf1", ["a1"], 0, am as any, onCap);
+    enforceWorkflowCostCap("wf1", ["a1"], 0, am as unknown, onCap);
     expect(onCap).not.toHaveBeenCalled();
   });
 });
@@ -78,13 +78,13 @@ describe("enforceWorkflowCostCap", () => {
 describe("detectWorkflowStall", () => {
   it("returns false for empty agent list", () => {
     const am = makeAgentManager({});
-    expect(detectWorkflowStall("wf1", [], am as any, vi.fn())).toBe(false);
+    expect(detectWorkflowStall("wf1", [], am as unknown, vi.fn())).toBe(false);
   });
 
   it("returns false when agent is running", () => {
     const am = makeAgentManager({
       a1: { status: "running", lastActivity: new Date(Date.now() - 99999999).toISOString() },
     });
-    expect(detectWorkflowStall("wf1", ["a1"], am as any, vi.fn())).toBe(false);
+    expect(detectWorkflowStall("wf1", ["a1"], am as unknown, vi.fn())).toBe(false);
   });
 });
