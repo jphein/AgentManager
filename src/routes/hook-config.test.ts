@@ -3,7 +3,6 @@ import express from "express";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import hookConfigRouter from "./hook-config";
 
-// Mock the store so tests don't hit the real filesystem
 vi.mock("../hook-config-store", () => ({
   getHookConfig: vi.fn().mockReturnValue({ agentId: "test-agent", rules: [], updatedAt: "" }),
   setHookConfig: vi
@@ -13,6 +12,9 @@ vi.mock("../hook-config-store", () => ({
     ),
   deleteHookConfig: vi.fn(),
 }));
+
+const HOOK_URL = "https://example.com/hook";
+const AGENT = "test-agent";
 
 function request(
   method: string,
@@ -72,9 +74,11 @@ afterAll(() => {
   server?.close();
 });
 
+const agentPath = `${AGENT}/hooks`;
+
 describe("GET /api/agents/:id/hooks", () => {
   it("returns empty rules for unknown agent", async () => {
-    const res = await request("GET", `${baseUrl}/api/agents/test-agent/hooks`);
+    const res = await request("GET", `${baseUrl}/api/agents/${agentPath}`);
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("rules");
     expect(Array.isArray(res.body.rules)).toBe(true);
@@ -83,109 +87,70 @@ describe("GET /api/agents/:id/hooks", () => {
 
 describe("PUT /api/agents/:id/hooks — valid rules", () => {
   it("accepts valid http rule", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [
-        {
-          id: "r1",
-          event: "PreToolUse",
-          type: "http",
-          url: "https://example.com/hook",
-          matcher: "Bash",
-        },
-      ],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r1", event: "PreToolUse", type: "http", url: HOOK_URL, matcher: "Bash" }],
     });
     expect(res.status).toBe(200);
     expect(Array.isArray((res.body as { rules: unknown[] }).rules)).toBe(true);
   });
 
   it("accepts valid command rule", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [
-        {
-          id: "r2",
-          event: "PostToolUse",
-          type: "command",
-          command: "echo hello",
-        },
-      ],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r2", event: "PostToolUse", type: "command", command: "echo hello" }],
     });
     expect(res.status).toBe(200);
     expect(Array.isArray((res.body as { rules: unknown[] }).rules)).toBe(true);
   });
 
   it("accepts empty rules array", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, { rules: [] });
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, { rules: [] });
     expect(res.status).toBe(200);
   });
 });
 
 describe("PUT /api/agents/:id/hooks — invalid rules (400 responses)", () => {
   it("rejects invalid event name", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [{ id: "r1", event: "BogusEvent", type: "http", url: "https://example.com" }],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r1", event: "BogusEvent", type: "http", url: HOOK_URL }],
     });
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toMatch(/invalid event/);
   });
 
   it("rejects invalid type", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [{ id: "r1", event: "PreToolUse", type: "webhook", url: "https://example.com" }],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r1", event: "PreToolUse", type: "webhook", url: HOOK_URL }],
     });
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toMatch(/invalid type/);
   });
 
   it("rejects http rule with command field set", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [
-        {
-          id: "r1",
-          event: "PreToolUse",
-          type: "http",
-          url: "https://example.com",
-          command: "echo hi",
-        },
-      ],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r1", event: "PreToolUse", type: "http", url: HOOK_URL, command: "echo hi" }],
     });
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toMatch(/command must not be set/);
   });
 
   it("rejects command rule with url field set", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [
-        {
-          id: "r1",
-          event: "PreToolUse",
-          type: "command",
-          command: "echo hi",
-          url: "https://example.com",
-        },
-      ],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r1", event: "PreToolUse", type: "command", command: "echo hi", url: HOOK_URL }],
     });
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toMatch(/url must not be set/);
   });
 
   it("rejects timeout greater than 60000ms", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [
-        {
-          id: "r1",
-          event: "PreToolUse",
-          type: "http",
-          url: "https://example.com",
-          timeout: 99999,
-        },
-      ],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r1", event: "PreToolUse", type: "http", url: HOOK_URL, timeout: 99999 }],
     });
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toMatch(/timeout must be/);
   });
 
   it("rejects dangerous command (rm -rf /)", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
       rules: [{ id: "r1", event: "PreToolUse", type: "command", command: "rm -rf /" }],
     });
     expect(res.status).toBe(400);
@@ -199,22 +164,14 @@ describe("PUT /api/agents/:id/hooks — invalid rules (400 responses)", () => {
       type: "command",
       command: "echo hi",
     }));
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, { rules });
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, { rules });
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toMatch(/max 20 rules/);
   });
 
   it("rejects invalid matcher regex", async () => {
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
-      rules: [
-        {
-          id: "r1",
-          event: "PreToolUse",
-          type: "http",
-          url: "https://example.com",
-          matcher: "[invalid regex(",
-        },
-      ],
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
+      rules: [{ id: "r1", event: "PreToolUse", type: "http", url: HOOK_URL, matcher: "[invalid regex(" }],
     });
     expect(res.status).toBe(400);
     expect((res.body as { error: string }).error).toMatch(/not a valid regex/);
@@ -227,15 +184,14 @@ describe("PUT /api/agents/:id/hooks — storage failure returns 500", () => {
     const mock = setHookConfig as ReturnType<typeof vi.fn>;
     mock.mockRejectedValueOnce(new Error("ENOSPC: no space left on device"));
 
-    const res = await request("PUT", `${baseUrl}/api/agents/test-agent/hooks`, {
+    const res = await request("PUT", `${baseUrl}/api/agents/${agentPath}`, {
       rules: [{ id: "r1", event: "Stop", type: "command", command: "echo hi" }],
     });
     expect(res.status).toBe(500);
     expect((res.body as { error: string }).error).toBe("Failed to save hook config");
 
-    // restore default
     mock.mockImplementation((_agentId: string, rules: unknown[]) =>
-      Promise.resolve({ agentId: "test-agent", rules, updatedAt: new Date().toISOString() }),
+      Promise.resolve({ agentId: AGENT, rules, updatedAt: new Date().toISOString() }),
     );
   });
 });
