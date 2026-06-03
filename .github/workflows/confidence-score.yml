@@ -1,0 +1,29 @@
+name: PR Confidence Score
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  confidence-score:
+    name: Agent Hallucination / Confidence Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for diff
+
+      - name: Run confidence scoring
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          chmod +x scripts/pr-confidence-score.sh
+          ./scripts/pr-confidence-score.sh "$PR_NUMBER" "origin/main"
