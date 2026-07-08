@@ -10,6 +10,11 @@ Preconditions (JP to confirm): auth mode decided; 2-agent fleet approved; kill s
 Caps (hard): max 2 agents; smallest practical contexts (Haiku, tiny prompts); kill every
 spawned process on exit; abort if `free -m` available < 8 GB.
 
+> **Auth (teamclaude) — security note:** the teamclaude proxy URL forwarded to agents
+> (`HTTP_PROXY`/`HTTPS_PROXY`, now on the buildEnv allowlist) **must remain credential-less**.
+> A `http://user:pass@host` form would be forwarded to every spawned agent verbatim by the
+> allowlist — keep proxy auth in the CA/proxy layer, never inline in the URL.
+
 1. `export BRIDGE_SPAWN_MODE=dreamteam BRIDGE_HOME=~/.guildmaster/bridge BRIDGE_TEAM=<the live team>`
 2. Arm kill switch check: confirm `bridgeHome()/platform/` is writable and NOT inside any agent
    workspace (the fork roots it under `~/.guildmaster/bridge`, which is not symlinked into workspaces).
