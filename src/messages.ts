@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { bridgeHome } from "./bridge-paths";
 import { logger } from "./logger";
 import type { AgentMessage, MessageType } from "./types";
 import { errorMessage } from "./types";
 
-const PERSISTENT_BASE = "/persistent";
-const PERSISTENT_AVAILABLE = existsSync(PERSISTENT_BASE);
-const DEFAULT_MESSAGES_FILE = PERSISTENT_AVAILABLE ? `${PERSISTENT_BASE}/messages.jsonl` : "/tmp/messages.jsonl";
+// guildmaster fork: one local-first home for message persistence (R7 cross-session),
+// rooted under bridgeHome() (default ~/.guildmaster/bridge) — no /persistent branch.
+const DEFAULT_MESSAGES_FILE = path.join(bridgeHome(), "messages.jsonl");
 
 // Cap stored messages to prevent unbounded growth
 const MAX_MESSAGES = 500;

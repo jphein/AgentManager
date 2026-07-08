@@ -13,6 +13,11 @@ export const fileExists = (p: string): Promise<boolean> =>
   );
 
 const GCS_BUCKET = process.env.GCS_BUCKET;
+// guildmaster fork: local-first. GCS sync is PERMANENTLY DISABLED — shared-context
+// lives on the local FS and needs no cross-container sync. The GCS_BUCKET guards
+// below are left intact as defence-in-depth but should never fire in this fork.
+// (`as boolean` keeps it non-narrowed so the guarded bodies stay reachable for tsc/biome.)
+const GCS_DISABLED = true as boolean;
 const HOME = process.env.HOME || "/home/agent";
 const CLAUDE_HOME = process.env.CLAUDE_HOME || path.join(HOME, ".claude");
 const SHARED_CONTEXT_DIR = getContextDir();
@@ -379,6 +384,7 @@ export async function cleanupAgentClaudeData(workspaceDir: string): Promise<void
 }
 
 export async function syncFromGCS(): Promise<void> {
+  if (GCS_DISABLED) return;
   if (!GCS_BUCKET) {
     logger.info("GCS_BUCKET not set, skipping GCS sync");
     return;
@@ -396,16 +402,19 @@ export async function syncFromGCS(): Promise<void> {
 }
 
 export async function syncContextFile(filename: string): Promise<void> {
+  if (GCS_DISABLED) return;
   const localPath = path.join(SHARED_CONTEXT_DIR, filename);
   if (!(await fileExists(localPath))) return;
   await uploadFile(localPath, `shared-context/${filename}`);
 }
 
 export async function deleteContextFile(filename: string): Promise<void> {
+  if (GCS_DISABLED) return;
   await deleteFile(`shared-context/${filename}`);
 }
 
 export async function syncClaudeHome(): Promise<void> {
+  if (GCS_DISABLED) return;
   await uploadDir(CLAUDE_HOME, "claude-home/");
   // Also sync ~/CLAUDE.md (user-level instructions, lives outside ~/.claude/)
   const homeClaude = path.join(HOME, "CLAUDE.md");
@@ -415,6 +424,7 @@ export async function syncClaudeHome(): Promise<void> {
 }
 
 export async function syncToGCS(): Promise<void> {
+  if (GCS_DISABLED) return;
   if (!GCS_BUCKET) return;
   if (syncInProgress) {
     logger.info("[sync] syncToGCS already in progress, skipping");
@@ -439,6 +449,7 @@ export async function syncToGCS(): Promise<void> {
  * multiple agents finishing close together) into a single sync after a delay.
  */
 export function debouncedSyncToGCS(): Promise<void> {
+  if (GCS_DISABLED) return Promise.resolve();
   return new Promise<void>((resolve) => {
     debouncedSyncResolvers.push(resolve);
     if (debouncedSyncTimer) clearTimeout(debouncedSyncTimer);
@@ -579,6 +590,7 @@ export function ensureDefaultContextFiles(): void {
 }
 
 export function startPeriodicSync(): void {
+  if (GCS_DISABLED) return;
   if (!GCS_BUCKET) return;
 
   // Watch shared-context for changes and sync immediately (debounced 3s)

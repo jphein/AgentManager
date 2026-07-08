@@ -1,13 +1,15 @@
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
+import { bridgeHome } from "./bridge-paths";
 import { logger } from "./logger";
 import { errorMessage } from "./types";
 
 // Always store SQLite on local filesystem - WAL mode requires POSIX mmap/flock
-// semantics that GCS FUSE does not support. Data persists for the container lifetime;
-// for cross-restart persistence, the DB would need a backup/restore mechanism.
-const DB_DIR = "/tmp/cost-data";
+// semantics that GCS FUSE does not support. guildmaster fork: rooted under
+// bridgeHome() (default ~/.guildmaster/bridge) so cost data survives session/
+// container restarts (R7), instead of the ephemeral /tmp.
+const DB_DIR = path.join(bridgeHome(), "cost-data");
 const DB_PATH = path.join(DB_DIR, "costs.db");
 
 export interface CostRecord {
