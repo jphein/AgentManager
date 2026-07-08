@@ -1,5 +1,6 @@
 import express, { type Request, type Response } from "express";
 import type { MessageBus } from "../messages";
+import { isKnownTeammate, loadRoster, type Teammate } from "../roster";
 import type { AgentMessage } from "../types";
 import { VALID_MESSAGE_TYPES } from "../types";
 import { param, queryString } from "../utils/express";
@@ -7,11 +8,11 @@ import { param, queryString } from "../utils/express";
 const MAX_MESSAGE_CONTENT_LENGTH = 50_000;
 const MAX_MESSAGE_BATCH_SIZE = 20;
 
-export function createMessagesRouter(messageBus: MessageBus) {
+export function createMessagesRouter(messageBus: MessageBus, rosterLoader: () => Promise<Teammate[]> = loadRoster) {
   const router = express.Router();
 
   // Post a message
-  router.post("/api/messages", (req: Request, res: Response) => {
+  router.post("/api/messages", async (req: Request, res: Response) => {
     const { from, fromName, to, channel, type, content, metadata, excludeRoles } = req.body ?? {};
     if (!from || typeof from !== "string") {
       res.status(400).json({ error: "from is required" });
@@ -34,8 +35,18 @@ export function createMessagesRouter(messageBus: MessageBus) {
       return;
     }
 
+    // Non-blocking: annotate (never reject) when a direct target is not a known
+    // owned teammate. Roster is advisory — delivery is still attempted (R2 warn-not-block).
+    let deliveryWarning: string | undefined;
+    if (to && typeof to === "string") {
+      const roster = await rosterLoader();
+      if (roster.length > 0 && !isKnownTeammate(roster, to)) {
+        deliveryWarning = `target '${to}' is not a known owned teammate in the current roster`;
+      }
+    }
+
     const msg = messageBus.post({ from, fromName, to, channel, type, content, metadata, excludeRoles });
-    res.json(msg);
+    res.json(deliveryWarning ? { ...msg, deliveryWarning } : msg);
   });
 
   // Post multiple messages in a single round-trip - useful for fan-out to N agents
