@@ -172,6 +172,27 @@ describe("WorkspaceManager", () => {
       process.env.GCS_BUCKET = undefined;
       process.env.DATABASE_URL = undefined;
     });
+
+    it("forwards standard proxy env (teamclaude compat) but stays an allowlist", () => {
+      const keys = ["HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "NODE_EXTRA_CA_CERTS", "PROXY_UNRELATED"];
+      const saved: Record<string, string | undefined> = {};
+      for (const k of keys) saved[k] = process.env[k];
+      process.env.HTTP_PROXY = "http://proxy:8080";
+      process.env.HTTPS_PROXY = "http://proxy:8080";
+      process.env.NO_PROXY = "localhost,127.0.0.1";
+      process.env.NODE_EXTRA_CA_CERTS = "/tmp/ca.pem";
+      process.env.PROXY_UNRELATED = "should-be-stripped";
+      const env = wm.buildEnv("agent-123");
+      expect(env.HTTP_PROXY).toBe("http://proxy:8080");
+      expect(env.HTTPS_PROXY).toBe("http://proxy:8080");
+      expect(env.NO_PROXY).toBe("localhost,127.0.0.1");
+      expect(env.NODE_EXTRA_CA_CERTS).toBe("/tmp/ca.pem");
+      expect(env.PROXY_UNRELATED).toBeUndefined(); // allowlist still strips unknown vars
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    });
   });
 
   describe("refreshAllAgentTokens", () => {

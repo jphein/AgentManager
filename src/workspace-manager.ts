@@ -256,6 +256,13 @@ export class WorkspaceManager {
       "ANTHROPIC_API_KEY",
       "ANTHROPIC_AUTH_TOKEN",
       "ANTHROPIC_BASE_URL",
+      // Standard proxy env — required when auth is provided by a transparent HTTPS
+      // proxy (e.g. teamclaude) rather than an API key. Agents must reach the API
+      // through the same proxy + CA as the server, or they bypass auth entirely.
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "NO_PROXY",
+      "NODE_EXTRA_CA_CERTS",
       // GitHub CLI and git operations
       "GH_TOKEN",
       "GITHUB_TOKEN",
