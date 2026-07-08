@@ -1,6 +1,8 @@
 import express, { type Request, type Response } from "express";
 import type { AgentManager } from "../agents";
 import { requireHumanUser } from "../auth";
+import { bridgeHome } from "../bridge-paths";
+import { spawnViaDreamteam } from "../dreamteam-spawn";
 import { MAX_BATCH_SIZE } from "../guardrails";
 import { logger } from "../logger";
 import type { MessageBus } from "../messages";
@@ -103,6 +105,14 @@ export function createAgentsRouter(
 
   // Create agent (streams SSE)
   router.post("/api/agents", validateCreateAgent, (req: Request, res: Response) => {
+    // Dreamteam mode: route the (validated) spec to a spawn-request file for the
+    // dreamteam consumer instead of spawning a raw CLI. 202 Accepted — queued, not live.
+    // The actual dreamteam spawn is deferred to the JP-gated live test (Task 5).
+    if (process.env.BRIDGE_SPAWN_MODE === "dreamteam") {
+      const stub = spawnViaDreamteam(req.body, { bridgeHome: bridgeHome() });
+      res.status(202).json({ deferred: true, spawnRequest: stub });
+      return;
+    }
     if (isMemoryPressure()) {
       res.status(503).json({ error: "Server under memory pressure - cannot create new agents. Try again later." });
       return;

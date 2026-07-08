@@ -18,10 +18,14 @@
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { bridgeHome } from "./bridge-paths";
 import { logger } from "./logger";
 import { errorMessage } from "./types";
 
-const PLATFORM_DIR = "/tmp/platform";
+// guildmaster fork: rooted under bridgeHome() (default ~/.guildmaster/bridge), which
+// is NOT symlinked into any agent workspace — so the kill-switch file stays outside
+// agent-accessible paths (the security property from this file's header holds).
+const PLATFORM_DIR = path.join(bridgeHome(), "platform");
 const KILL_SWITCH_FILE = path.join(PLATFORM_DIR, "kill-switch.json");
 const GCS_BUCKET = process.env.GCS_BUCKET;
 const GCS_PATH = "platform/kill-switch.json";

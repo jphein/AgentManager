@@ -2,10 +2,12 @@ import path from "node:path";
 import express from "express";
 import { AgentManager } from "./src/agents";
 import { authMiddleware } from "./src/auth";
+import { bridgeHome } from "./src/bridge-paths";
 import { cleanupOrphanedProcesses, cleanupStaleWorkspaces } from "./src/cleanup";
 import { corsMiddleware } from "./src/cors";
 import { CostTracker } from "./src/cost-tracker";
 import { initDepCache } from "./src/dep-cache";
+import { attachDreamteamBridge } from "./src/dreamteam-bridge";
 import { isExemptFromKillAndRecovery } from "./src/exempt-paths";
 import { GradeStore } from "./src/grading";
 import { isKilled, loadPersistedState, startGcsKillSwitchPoll } from "./src/kill-switch";
@@ -232,7 +234,18 @@ app.use(createKillSwitchRouter(agentManager));
 
 // Auto-deliver messages to idle agents (and interrupt busy ones for "interrupt" type). See src/message-delivery.ts.
 const deliverySettleMs = Number.parseInt(process.env.DELIVERY_SETTLE_MS ?? "250", 10);
-attachMessageDelivery(messageBus, agentManager, { isKilled, deliverySettleMs });
+// Dreamteam mode: relay to native SendMessage via the file-queue (R16 acks); do NOT
+// auto-deliver to raw CLIs. Native mode (default) keeps the existing behaviour.
+if (process.env.BRIDGE_SPAWN_MODE === "dreamteam") {
+  attachDreamteamBridge(messageBus, {
+    bridgeHome: bridgeHome(),
+    ackTimeoutMs: Number(process.env.BRIDGE_ACK_TIMEOUT_MS ?? 15000),
+    maxAttempts: Number(process.env.BRIDGE_MAX_ATTEMPTS ?? 3),
+    pollMs: 1000,
+  });
+} else {
+  attachMessageDelivery(messageBus, agentManager, { isKilled, deliverySettleMs });
+}
 
 const uiDistPath = path.join(__dirname, "ui", "dist");
 app.use(express.static(uiDistPath));
