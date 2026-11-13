@@ -1,5 +1,7 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { mcpTokenDir } from "./bridge-paths";
 import { logger } from "./logger";
 import { errorMessage } from "./types";
 
@@ -15,7 +17,7 @@ export interface MCPOAuthToken {
 
 /** Directory where MCP OAuth tokens are persisted (read at runtime so tests can override). */
 function getMcpTokenDir(): string {
-  return process.env.MCP_TOKEN_DIR || "/persistent/mcp-tokens";
+  return process.env.MCP_TOKEN_DIR || mcpTokenDir(); // guildmaster#14: was /persistent/mcp-tokens
 }
 
 /**
@@ -24,7 +26,7 @@ function getMcpTokenDir(): string {
 export function ensureTokenDir(): void {
   const dir = getMcpTokenDir();
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); // tokens: owner only
     logger.info(`[MCP-OAuth] Created token directory: ${dir}`);
   }
 }
@@ -32,7 +34,15 @@ export function ensureTokenDir(): void {
 /**
  * Get the file path for a server's token storage
  */
+const SERVER_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 function getTokenFilePath(server: string): string {
+  // A server name can never climb out of the token dir (e.g. "../shared-context/x", a
+  // sibling under BRIDGE_HOME since guildmaster#14). Rejected, not stripped: stripping
+  // would alias distinct names ("git.hub" → "github") onto one credential file.
+  if (!SERVER_NAME.test(server)) {
+    throw new Error(`[MCP-OAuth] invalid server name: ${JSON.stringify(server)}`);
+  }
   return path.join(getMcpTokenDir(), `${server}.json`);
 }
 
@@ -42,7 +52,16 @@ function getTokenFilePath(server: string): string {
 export function saveToken(token: MCPOAuthToken): void {
   ensureTokenDir();
   const filePath = getTokenFilePath(token.server);
-  fs.writeFileSync(filePath, JSON.stringify(token, null, 2), "utf8");
+  // A fresh 0600 file renamed over the target: an older 0644 file is replaced, never written
+  // into while still readable (writeFileSync's mode applies only on create).
+  const tmpPath = `${filePath}.tmp.${process.pid}.${crypto.randomBytes(4).toString("hex")}`;
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(token, null, 2), { encoding: "utf8", mode: 0o600, flag: "wx" });
+    fs.renameSync(tmpPath, filePath);
+  } catch (err: unknown) {
+    fs.rmSync(tmpPath, { force: true }); // a failed save must not leave the credential behind
+    throw err;
+  }
   logger.info(`[MCP-OAuth] Saved token for ${token.server}`);
 }
 
@@ -102,7 +121,11 @@ function listStoredTokens(): string[] {
   ensureTokenDir();
   try {
     const files = fs.readdirSync(getMcpTokenDir());
-    return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+    // Names the validator would refuse (legacy "_x.json", ".old.json") are skipped, not fatal
+    return files
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.replace(/\.json$/, ""))
+      .filter((n) => SERVER_NAME.test(n));
   } catch (err: unknown) {
     logger.error("[MCP-OAuth] Failed to list stored tokens", {
       error: errorMessage(err),
