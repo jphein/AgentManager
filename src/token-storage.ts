@@ -52,7 +52,7 @@ let tokenCache = new Map<string, StoredToken | null>();
 
 export function ensureTokenDir(): void {
   if (!fs.existsSync(TOKEN_DIR)) {
-    fs.mkdirSync(TOKEN_DIR, { recursive: true });
+    fs.mkdirSync(TOKEN_DIR, { recursive: true, mode: 0o700 }); // tokens: owner only
   }
 }
 

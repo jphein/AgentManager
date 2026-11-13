@@ -33,6 +33,31 @@ describe("MCP token dirs default under BRIDGE_HOME (guildmaster#14)", () => {
     expect(loadToken("github")?.accessToken).toBe("x");
   });
 
+  it("mcp-oauth-storage keeps tokens owner-only (dir 0700, file 0600, even over an old 0644 file)", async () => {
+    const { saveToken } = await import("./mcp-oauth-storage");
+    const dir = path.join(home, "mcp-tokens");
+    fs.mkdirSync(dir, { mode: 0o700 });
+    fs.writeFileSync(path.join(dir, "github.json"), "{}", { mode: 0o644 });
+    saveToken({ server: "github", accessToken: "x", tokenType: "Bearer", authenticatedAt: new Date().toISOString() });
+    expect(fs.statSync(path.join(dir, "github.json")).mode & 0o777).toBe(0o600);
+    fs.rmSync(dir, { recursive: true });
+    saveToken({ server: "linear", accessToken: "y", tokenType: "Bearer", authenticatedAt: new Date().toISOString() });
+    expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
+  });
+
+  it("mcp-oauth-storage never writes outside the token dir for a crafted server name", async () => {
+    const { saveToken, loadToken } = await import("./mcp-oauth-storage");
+    fs.mkdirSync(path.join(home, "shared-context"));
+    saveToken({
+      server: "../shared-context/leak",
+      accessToken: "z",
+      tokenType: "Bearer",
+      authenticatedAt: new Date().toISOString(),
+    });
+    expect(fs.readdirSync(path.join(home, "shared-context"))).toEqual([]);
+    expect(loadToken("../shared-context/leak")?.accessToken).toBe("z"); // same sanitised name round-trips
+  });
+
   it("token-storage creates its dir under BRIDGE_HOME/mcp-tokens", async () => {
     const { ensureTokenDir } = await import("./token-storage");
     ensureTokenDir();

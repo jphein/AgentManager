@@ -25,7 +25,7 @@ function getMcpTokenDir(): string {
 export function ensureTokenDir(): void {
   const dir = getMcpTokenDir();
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); // tokens: owner only
     logger.info(`[MCP-OAuth] Created token directory: ${dir}`);
   }
 }
@@ -34,7 +34,10 @@ export function ensureTokenDir(): void {
  * Get the file path for a server's token storage
  */
 function getTokenFilePath(server: string): string {
-  return path.join(getMcpTokenDir(), `${server}.json`);
+  // Same rule as token-storage: a server name can never climb out of the token dir
+  // (e.g. "../shared-context/x", a sibling under BRIDGE_HOME since guildmaster#14).
+  const safe = server.replace(/[^a-zA-Z0-9_-]/g, "");
+  return path.join(getMcpTokenDir(), `${safe}.json`);
 }
 
 /**
@@ -43,7 +46,8 @@ function getTokenFilePath(server: string): string {
 export function saveToken(token: MCPOAuthToken): void {
   ensureTokenDir();
   const filePath = getTokenFilePath(token.server);
-  fs.writeFileSync(filePath, JSON.stringify(token, null, 2), "utf8");
+  fs.writeFileSync(filePath, JSON.stringify(token, null, 2), { encoding: "utf8", mode: 0o600 });
+  fs.chmodSync(filePath, 0o600); // mode applies only on create; tighten a file an older build left 0644
   logger.info(`[MCP-OAuth] Saved token for ${token.server}`);
 }
 
