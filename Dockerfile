@@ -103,5 +103,7 @@ COPY --chown=agent:agent entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
 ENV SHARED_CONTEXT_DIR=/shared-context
+# The image keeps tokens on the /persistent volume; outside a container they default under BRIDGE_HOME (guildmaster#14).
+ENV MCP_TOKEN_DIR=/persistent/mcp-tokens
 EXPOSE 8080
 ENTRYPOINT ["./entrypoint.sh"]

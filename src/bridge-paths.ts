@@ -26,3 +26,18 @@ export function deliveredDir(): string {
 export function spawnRequestsDir(): string {
   return path.join(bridgeHome(), "spawn-requests");
 }
+
+/** Shared-context .md files that every agent workspace gets symlinked
+ *  (guildmaster#14; was the container path /shared-context). Env seam
+ *  SHARED_CONTEXT_DIR (utils/context.ts). A sibling of platform/ and
+ *  mcp-tokens/, never their parent: the kill-switch file and tokens must
+ *  stay outside the tree agents are handed. */
+export function sharedContextDir(): string {
+  return path.join(bridgeHome(), "shared-context");
+}
+
+/** MCP OAuth tokens, one JSON file per service (guildmaster#14; was the
+ *  container path /persistent/mcp-tokens). Env seam MCP_TOKEN_DIR. */
+export function mcpTokenDir(): string {
+  return path.join(bridgeHome(), "mcp-tokens");
+}

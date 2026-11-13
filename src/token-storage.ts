@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { mcpTokenDir } from "./bridge-paths";
 import { logger } from "./logger";
 import { registerSecretValue, unregisterSecretValue } from "./sanitize";
 import mapping from "./service-mapping.json";
@@ -10,7 +11,8 @@ import { errorMessage } from "./types";
  * Unified token storage for all integrations (GitHub, Linear, Figma, etc.).
  * Backward compatible with the existing MCPOAuthToken shape.
  *
- * Stores one JSON file per service in /persistent/mcp-tokens/.
+ * Stores one JSON file per service in <bridgeHome()>/mcp-tokens/ (MCP_TOKEN_DIR
+ * overrides; guildmaster#14 moved it off the container path /persistent/mcp-tokens).
  * Uses atomic write (tmp + rename) to prevent corruption.
  */
 
@@ -43,7 +45,7 @@ export const SERVICE_TO_ENV: Record<string, string> = mapping.serviceToEnv;
 /** All known service names. */
 export const KNOWN_SERVICES = new Set(Object.keys(SERVICE_TO_ENV));
 
-const TOKEN_DIR = process.env.MCP_TOKEN_DIR || "/persistent/mcp-tokens";
+const TOKEN_DIR = process.env.MCP_TOKEN_DIR || mcpTokenDir();
 
 /** In-memory cache: service name → StoredToken | null (null = checked, not found) */
 let tokenCache = new Map<string, StoredToken | null>();

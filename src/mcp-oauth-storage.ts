@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { mcpTokenDir } from "./bridge-paths";
 import { logger } from "./logger";
 import { errorMessage } from "./types";
 
@@ -15,7 +16,7 @@ export interface MCPOAuthToken {
 
 /** Directory where MCP OAuth tokens are persisted (read at runtime so tests can override). */
 function getMcpTokenDir(): string {
-  return process.env.MCP_TOKEN_DIR || "/persistent/mcp-tokens";
+  return process.env.MCP_TOKEN_DIR || mcpTokenDir(); // guildmaster#14: was /persistent/mcp-tokens
 }
 
 /**
