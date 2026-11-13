@@ -71,6 +71,18 @@ describe("MCP token dirs default under BRIDGE_HOME (guildmaster#14)", () => {
     expect(fs.statSync(f).mode & 0o777).toBe(0o600);
   });
 
+  it("mcp-oauth-storage lists valid tokens past a legacy filename, and a failed save leaves no temp file", async () => {
+    const { saveToken, getAllTokens } = await import("./mcp-oauth-storage");
+    const dir = path.join(home, "mcp-tokens");
+    const at = new Date().toISOString();
+    saveToken({ server: "github", accessToken: "a", tokenType: "Bearer", authenticatedAt: at });
+    fs.writeFileSync(path.join(dir, "_legacy.json"), "{}");
+    expect(getAllTokens().map((t) => t.server)).toEqual(["github"]);
+    fs.mkdirSync(path.join(dir, "linear.json")); // rename onto a directory fails
+    expect(() => saveToken({ server: "linear", accessToken: "b", tokenType: "Bearer", authenticatedAt: at })).toThrow();
+    expect(fs.readdirSync(dir).filter((f) => f.includes(".tmp."))).toEqual([]);
+  });
+
   it("token-storage creates its dir under BRIDGE_HOME/mcp-tokens", async () => {
     const { ensureTokenDir } = await import("./token-storage");
     ensureTokenDir();
