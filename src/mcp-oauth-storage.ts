@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { mcpTokenDir } from "./bridge-paths";
@@ -34,10 +35,13 @@ export function ensureTokenDir(): void {
  * Get the file path for a server's token storage
  */
 function getTokenFilePath(server: string): string {
-  // Same rule as token-storage: a server name can never climb out of the token dir
-  // (e.g. "../shared-context/x", a sibling under BRIDGE_HOME since guildmaster#14).
-  const safe = server.replace(/[^a-zA-Z0-9_-]/g, "");
-  return path.join(getMcpTokenDir(), `${safe}.json`);
+  // A server name can never climb out of the token dir (e.g. "../shared-context/x", a
+  // sibling under BRIDGE_HOME since guildmaster#14). Rejected, not stripped: stripping
+  // would alias distinct names ("git.hub" → "github") onto one credential file.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(server)) {
+    throw new Error(`[MCP-OAuth] invalid server name: ${JSON.stringify(server)}`);
+  }
+  return path.join(getMcpTokenDir(), `${server}.json`);
 }
 
 /**
@@ -46,8 +50,11 @@ function getTokenFilePath(server: string): string {
 export function saveToken(token: MCPOAuthToken): void {
   ensureTokenDir();
   const filePath = getTokenFilePath(token.server);
-  fs.writeFileSync(filePath, JSON.stringify(token, null, 2), { encoding: "utf8", mode: 0o600 });
-  fs.chmodSync(filePath, 0o600); // mode applies only on create; tighten a file an older build left 0644
+  // A fresh 0600 file renamed over the target: an older 0644 file is replaced, never written
+  // into while still readable (writeFileSync's mode applies only on create).
+  const tmpPath = `${filePath}.tmp.${process.pid}.${crypto.randomBytes(4).toString("hex")}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(token, null, 2), { encoding: "utf8", mode: 0o600, flag: "wx" });
+  fs.renameSync(tmpPath, filePath);
   logger.info(`[MCP-OAuth] Saved token for ${token.server}`);
 }
 

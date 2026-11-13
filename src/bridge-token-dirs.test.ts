@@ -45,17 +45,30 @@ describe("MCP token dirs default under BRIDGE_HOME (guildmaster#14)", () => {
     expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
   });
 
-  it("mcp-oauth-storage never writes outside the token dir for a crafted server name", async () => {
+  it("mcp-oauth-storage refuses a crafted server name instead of writing outside or aliasing", async () => {
     const { saveToken, loadToken } = await import("./mcp-oauth-storage");
     fs.mkdirSync(path.join(home, "shared-context"));
-    saveToken({
-      server: "../shared-context/leak",
-      accessToken: "z",
-      tokenType: "Bearer",
-      authenticatedAt: new Date().toISOString(),
-    });
+    const at = new Date().toISOString();
+    expect(() =>
+      saveToken({ server: "../shared-context/leak", accessToken: "z", tokenType: "Bearer", authenticatedAt: at }),
+    ).toThrow(/invalid server name/);
     expect(fs.readdirSync(path.join(home, "shared-context"))).toEqual([]);
-    expect(loadToken("../shared-context/leak")?.accessToken).toBe("z"); // same sanitised name round-trips
+    saveToken({ server: "github", accessToken: "a", tokenType: "Bearer", authenticatedAt: at });
+    saveToken({ server: "git.hub", accessToken: "b", tokenType: "Bearer", authenticatedAt: at });
+    expect(loadToken("github")?.accessToken).toBe("a"); // distinct names, distinct files
+    expect(loadToken("git.hub")?.accessToken).toBe("b");
+  });
+
+  it("mcp-oauth-storage replaces an old 0644 token file rather than writing into it", async () => {
+    const { saveToken } = await import("./mcp-oauth-storage");
+    const dir = path.join(home, "mcp-tokens");
+    fs.mkdirSync(dir, { mode: 0o700 });
+    const f = path.join(dir, "github.json");
+    fs.writeFileSync(f, "{}", { mode: 0o644 });
+    const before = fs.statSync(f).ino;
+    saveToken({ server: "github", accessToken: "x", tokenType: "Bearer", authenticatedAt: new Date().toISOString() });
+    expect(fs.statSync(f).ino).not.toBe(before); // a new inode: the readable one was never written with the token
+    expect(fs.statSync(f).mode & 0o777).toBe(0o600);
   });
 
   it("token-storage creates its dir under BRIDGE_HOME/mcp-tokens", async () => {
